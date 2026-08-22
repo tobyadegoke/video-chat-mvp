@@ -1,122 +1,258 @@
 import 'package:flutter/material.dart';
+import 'package:livekit_client/livekit_client.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const VideoChatApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class VideoChatApp extends StatelessWidget {
+  const VideoChatApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _HomePageState extends State<HomePage> {
+  final roomNameController = TextEditingController();
 
-  void _incrementCounter() {
+  @override
+  void dispose() {
+    roomNameController.dispose();
+    super.dispose();
+  }
+
+  void joinRoom() {
+    final roomName = roomNameController.text.trim();
+
+    if (roomName.isEmpty) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoRoomPage(
+          roomName: roomName,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: SizedBox(
+          width: 350,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Video Chat MVP',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              TextField(
+                controller: roomNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Room Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: joinRoom,
+                child: const Text('Join Room'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class VideoRoomPage extends StatefulWidget {
+  final String roomName;
+
+  const VideoRoomPage({
+    super.key,
+    required this.roomName,
+  });
+
+  @override
+  State<VideoRoomPage> createState() => _VideoRoomPageState();
+}
+
+class _VideoRoomPageState extends State<VideoRoomPage> {
+  Room? room;
+  bool isConnecting = false;
+  String status = 'Not connected';
+
+  Future<void> connectToRoom() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      isConnecting = true;
+      status = 'Connecting...';
+    });
+
+    try {
+      final newRoom = Room();
+
+const liveKitUrl =
+    'wss://video-chat-mvp-raq8joq9.livekit.cloud';
+
+const token =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJBUEloTU1ocVRIZThtYXUiLCJzdWIiOiJob3N0LXRvYmkiLCJleHAiOjE3ODcyNzgzMzAsIm5iZiI6MTc4NzE5MTkzMCwiaWF0IjoxNzg3MTkxOTMwLCJpZGVudGl0eSI6Imhvc3QtdG9iaSIsIm5hbWUiOiJob3N0LXRvYmkiLCJ2aWRlbyI6eyJyb29tSm9pbiI6dHJ1ZSwicm9vbSI6InRlc3Qtcm9vbSJ9fQ.c0WptElu0NR7HxIJ5Znajl0o4_83mEtDKlmUupPSfzM';
+
+await newRoom.connect(
+  liveKitUrl,
+  token,
+);
+
+final localParticipant = newRoom.localParticipant;
+
+if (localParticipant == null) {
+  throw Exception('Local participant was not created');
+}
+
+await localParticipant.setCameraEnabled(true);
+await localParticipant.setMicrophoneEnabled(true);
+
+
+      setState(() {
+        room = newRoom;
+        status = 'Connected to ${widget.roomName}';
+      });
+    } catch (error) {
+      setState(() {
+        status = 'Connection failed: $error';
+      });
+    } finally {
+      setState(() {
+        isConnecting = false;
+      });
+    }
+  }
+
+  Future<void> disconnect() async {
+    await room?.disconnect();
+
+    setState(() {
+      room = null;
+      status = 'Disconnected';
     });
   }
 
   @override
+  void dispose() {
+    room?.disconnect();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: Text('Room: ${widget.roomName}'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: Column(
+  children: [
+    Expanded(
+      child: Container(
+        width: double.infinity,
+        color: Colors.black,
+        child: room != null
+            ? buildLocalVideo()
+            : const Center(
+                child: Text(
+                  'Not connected',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+      ),
+    ),
+
+    Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          Text(status),
+
+          const SizedBox(height: 20),
+
+          if (room == null)
+            ElevatedButton(
+              onPressed:
+                  isConnecting ? null : connectToRoom,
+              child: Text(
+                isConnecting
+                    ? 'Connecting...'
+                    : 'Connect Camera',
+              ),
             ),
-          ],
-        ),
+
+          if (room != null)
+            ElevatedButton(
+              onPressed: disconnect,
+              child: const Text('Leave Room'),
+            ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+    ),
+  ],
+),
     );
   }
+
+Widget buildLocalVideo() {
+  final localParticipant = room?.localParticipant;
+
+  if (localParticipant == null) {
+    return const Center(
+      child: Text('Camera not available'),
+    );
+  }
+
+  final publications =
+      localParticipant.videoTrackPublications;
+
+  if (publications.isEmpty) {
+    return const Center(
+      child: Text('Waiting for camera...'),
+    );
+  }
+
+  final videoTrack = publications.first.track;
+
+  if (videoTrack is! LocalVideoTrack) {
+    return const Center(
+      child: Text('Waiting for camera...'),
+    );
+  }
+
+return VideoTrackRenderer(
+  videoTrack,
+  fit: VideoViewFit.cover,
+);
+}
+
 }
