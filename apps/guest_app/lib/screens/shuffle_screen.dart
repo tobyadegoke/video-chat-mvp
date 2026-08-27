@@ -1,8 +1,6 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
-import '../data/mock_hosts.dart';
+import '../services/available_host_service.dart';
 
 class ShuffleScreen extends StatefulWidget {
   const ShuffleScreen({super.key});
@@ -12,23 +10,50 @@ class ShuffleScreen extends StatefulWidget {
 }
 
 class _ShuffleScreenState extends State<ShuffleScreen> {
-  final Random _random = Random();
+  final AvailableHostService _hostService = AvailableHostService();
 
-  Host? _selectedHost;
+  AvailableHost? _selectedHost;
 
-  void _findHost() {
-    final availableHosts = mockHosts
-        .where((host) => host.isOnline && !host.isLive)
-        .toList();
+  bool _isLoading = false;
+  String? _errorMessage;
 
-    if (availableHosts.isEmpty) {
-      return;
-    }
-
+  Future<void> _findHost() async {
     setState(() {
-      _selectedHost =
-          availableHosts[_random.nextInt(availableHosts.length)];
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    try {
+      final hosts = await _hostService.getAvailableHosts();
+
+      if (!mounted) return;
+
+      if (hosts.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _selectedHost = null;
+          _errorMessage = 'No hosts are available right now.';
+        });
+
+        return;
+      }
+
+      // For now, select the first available host.
+      // We'll add random matching after confirming Supabase works.
+      setState(() {
+        _selectedHost = hosts.first;
+        _isLoading = false;
+      });
+    } catch (error) {
+      debugPrint('AVAILABLE HOST ERROR: $error');
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Unable to find a host. Please try again.';
+      });
+    }
   }
 
   void _startCall() {
@@ -36,13 +61,18 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Starting a call with ${_selectedHost!.name}...',
-        ),
+        content: Text('Starting a call with ${_selectedHost!.displayName}...'),
       ),
     );
 
     // LiveKit call navigation will go here later.
+  }
+
+  void _goBack() {
+    setState(() {
+      _selectedHost = null;
+      _errorMessage = null;
+    });
   }
 
   @override
@@ -51,9 +81,9 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
       body: SafeArea(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          child: _selectedHost == null
-              ? _buildFindHostState()
-              : _buildHostFoundState(_selectedHost!),
+          child: _selectedHost != null
+              ? _buildHostFoundState(_selectedHost!)
+              : _buildFindHostState(),
         ),
       ),
     );
@@ -66,20 +96,13 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.shuffle_rounded,
-            size: 80,
-            color: Colors.redAccent,
-          ),
+          const Icon(Icons.shuffle_rounded, size: 80, color: Colors.redAccent),
 
           const SizedBox(height: 24),
 
           const Text(
             'Meet Someone New',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 12),
@@ -87,23 +110,35 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
           const Text(
             'We’ll connect you with an available host.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white60,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white60),
           ),
 
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
+
+          if (_errorMessage != null)
+            Text(
+              _errorMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+
+          const SizedBox(height: 16),
 
           SizedBox(
             width: double.infinity,
             height: 56,
             child: FilledButton.icon(
-              onPressed: _findHost,
-              icon: const Icon(Icons.shuffle),
-              label: const Text(
-                'Find a Host',
-                style: TextStyle(fontSize: 17),
+              onPressed: _isLoading ? null : _findHost,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.shuffle),
+              label: Text(
+                _isLoading ? 'Finding Host...' : 'Find a Host',
+                style: const TextStyle(fontSize: 17),
               ),
             ),
           ),
@@ -112,7 +147,7 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
     );
   }
 
-  Widget _buildHostFoundState(Host host) {
+  Widget _buildHostFoundState(AvailableHost host) {
     return Padding(
       key: ValueKey(host.id),
       padding: const EdgeInsets.all(24),
@@ -120,50 +155,56 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
         children: [
           const SizedBox(height: 32),
 
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              onPressed: _goBack,
+              icon: const Icon(Icons.arrow_back),
+            ),
+          ),
+
+          const Spacer(),
+
           const Text(
             'You matched with',
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: Colors.white60, fontSize: 16),
           ),
 
           const SizedBox(height: 16),
 
           CircleAvatar(
             radius: 90,
-            backgroundImage: NetworkImage(host.imageUrl),
+            backgroundColor: const Color(0xFF1C1C1C),
+            backgroundImage:
+                host.avatarUrl != null && host.avatarUrl!.isNotEmpty
+                ? NetworkImage(host.avatarUrl!)
+                : null,
+            child: host.avatarUrl == null || host.avatarUrl!.isEmpty
+                ? const Icon(Icons.person, size: 90, color: Colors.white38)
+                : null,
           ),
 
           const SizedBox(height: 24),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                host.name,
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Icon(
-                Icons.circle,
-                color: Colors.green,
-                size: 14,
-              ),
-            ],
+          Text(
+            host.displayName,
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 8),
 
-          Text(
-            host.category,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.white60,
+          if (host.username.isNotEmpty)
+            Text(
+              '@${host.username}',
+              style: const TextStyle(fontSize: 15, color: Colors.white38),
             ),
+
+          const SizedBox(height: 12),
+
+          Text(
+            host.bio ?? 'Available to chat',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, color: Colors.white60),
           ),
 
           const Spacer(),
@@ -174,10 +215,7 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
             child: FilledButton.icon(
               onPressed: _startCall,
               icon: const Icon(Icons.videocam),
-              label: const Text(
-                'Start Call',
-                style: TextStyle(fontSize: 17),
-              ),
+              label: const Text('Start Call', style: TextStyle(fontSize: 17)),
             ),
           ),
 
@@ -187,7 +225,7 @@ class _ShuffleScreenState extends State<ShuffleScreen> {
             width: double.infinity,
             height: 56,
             child: OutlinedButton.icon(
-              onPressed: _findHost,
+              onPressed: _isLoading ? null : _findHost,
               icon: const Icon(Icons.shuffle),
               label: const Text(
                 'Shuffle Again',
