@@ -14,10 +14,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final ProfileService _profileService = ProfileService();
-
-  Profile? _profile;
   bool _isLoading = true;
+  Profile? _profile;
+  final ProfileService _profileService = ProfileService();
 
   @override
   void initState() {
@@ -46,6 +45,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await Supabase.instance.client.auth.signOut();
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Log Out?'),
+          content: const Text('Are you sure you want to log out?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(context);
+
+                await _logout();
+              },
+              child: const Text('Log Out'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -331,46 +356,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Log Out?'),
-          content: const Text('Are you sure you want to log out?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(context);
-
-                await _logout();
-              },
-              child: const Text('Log Out'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _ProfileOption extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
-
   const _ProfileOption({
     required this.icon,
     required this.title,
     required this.subtitle,
     this.onTap,
   });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String subtitle;
+  final String title;
 
   @override
   Widget build(BuildContext context) {

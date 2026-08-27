@@ -1,249 +1,234 @@
 import 'package:flutter/material.dart';
 
-import '../data/mock_hosts.dart';
+import '../models/host.dart';
+import '../services/host_service.dart';
 
-class LiveScreen extends StatelessWidget {
+class LiveScreen extends StatefulWidget {
   const LiveScreen({super.key});
 
   @override
+  State<LiveScreen> createState() => _LiveScreenState();
+}
+
+class _LiveScreenState extends State<LiveScreen> {
+  final HostService _hostService = HostService();
+
+  List<Host> _liveHosts = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLiveHosts();
+  }
+
+  Future<void> _loadLiveHosts() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final hosts = await _hostService.getLiveHosts();
+
+      if (!mounted) return;
+
+      setState(() {
+        _liveHosts = hosts;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Unable to load live hosts.';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final liveHosts =
-        mockHosts.where((host) => host.isLive).toList();
-
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: liveHosts.isEmpty
-              ? const _EmptyLiveState()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Live Now 🔴',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+      appBar: AppBar(title: const Text('Live Now'), centerTitle: false),
+      body: RefreshIndicator(onRefresh: _loadLiveHosts, child: _buildBody()),
+    );
+  }
 
-                    const SizedBox(height: 8),
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-                    Text(
-                      '${liveHosts.length} hosts are live right now',
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 15,
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Expanded(
-                      child: GridView.builder(
-                        itemCount: liveHosts.length,
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 14,
-                          childAspectRatio: 0.68,
-                        ),
-                        itemBuilder: (context, index) {
-                          final host = liveHosts[index];
-
-                          return _LiveHostCard(
-                            host: host,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+    if (_errorMessage != null) {
+      return ListView(
+        children: [
+          const SizedBox(height: 200),
+          Center(
+            child: Column(
+              children: [
+                Text(_errorMessage!),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _loadLiveHosts,
+                  child: const Text('Try Again'),
                 ),
-        ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_liveHosts.isEmpty) {
+      return ListView(
+        children: const [
+          SizedBox(height: 200),
+          Center(
+            child: Column(
+              children: [
+                Icon(Icons.live_tv_outlined, size: 56, color: Colors.white38),
+                SizedBox(height: 16),
+                Text(
+                  'No hosts are live right now',
+                  style: TextStyle(fontSize: 16, color: Colors.white54),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const AlwaysScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.72,
       ),
+      itemCount: _liveHosts.length,
+      itemBuilder: (context, index) {
+        final host = _liveHosts[index];
+
+        return _LiveHostCard(
+          host: host,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Joining ${host.displayName}...')),
+            );
+          },
+        );
+      },
     );
   }
 }
 
 class _LiveHostCard extends StatelessWidget {
   final Host host;
+  final VoidCallback onTap;
 
-  const _LiveHostCard({
-    required this.host,
-  });
-
-  void _joinLive(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Joining ${host.name}\'s live...',
-        ),
-      ),
-    );
-
-    // LiveKit room navigation will go here later.
-  }
+  const _LiveHostCard({required this.host, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _joinLive(context),
-      child: Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Ink(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1C),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.network(
-                host.imageUrl,
-                fit: BoxFit.cover,
-              ),
-
-              // Bottom gradient for readability
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.85),
-                    ],
-                  ),
-                ),
-              ),
-
-              // LIVE badge
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.circle,
-                        size: 8,
-                        color: Colors.white,
-                      ),
-                      SizedBox(width: 5),
-                      Text(
-                        'LIVE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: host.avatarUrl != null && host.avatarUrl!.isNotEmpty
+                    ? Image.network(
+                        host.avatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) {
+                          return const Center(
+                            child: Icon(
+                              Icons.person,
+                              size: 60,
+                              color: Colors.white38,
+                            ),
+                          );
+                        },
+                      )
+                    : const Center(
+                        child: Icon(
+                          Icons.person,
+                          size: 60,
+                          color: Colors.white38,
                         ),
                       ),
-                    ],
-                  ),
-                ),
               ),
+            ),
 
-              // Host details
-              Positioned(
-                left: 14,
-                right: 14,
-                bottom: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    Icon(Icons.circle, size: 8),
+                    SizedBox(width: 5),
                     Text(
-                      host.name,
-                      style: const TextStyle(
-                        fontSize: 18,
+                      'LIVE',
+                      style: TextStyle(
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 3),
-
-                    Text(
-                      host.category,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 38,
-                      child: FilledButton(
-                        onPressed: () => _joinLive(context),
-                        child: const Text('Join Live'),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    host.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (host.username != null && host.username!.isNotEmpty)
+                    Text(
+                      '@${host.username}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _EmptyLiveState extends StatelessWidget {
-  const _EmptyLiveState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.live_tv_outlined,
-            size: 80,
-            color: Colors.white38,
-          ),
-
-          const SizedBox(height: 20),
-
-          const Text(
-            'No hosts are live right now',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          const Text(
-            'Check back soon for live conversations.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white60,
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          OutlinedButton.icon(
-            onPressed: () {
-              // Later this can refresh data from Supabase.
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Refresh'),
-          ),
-        ],
       ),
     );
   }

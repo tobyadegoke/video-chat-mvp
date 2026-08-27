@@ -28,10 +28,16 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = Supabase.instance.client.auth;
+
     return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
+      stream: auth.onAuthStateChange,
+      initialData: AuthState(
+        AuthChangeEvent.initialSession,
+        auth.currentSession,
+      ),
       builder: (context, snapshot) {
-        final session = snapshot.data?.session;
+        final session = snapshot.data?.session ?? auth.currentSession;
 
         if (session == null) {
           return const AuthScreen();
@@ -42,8 +48,6 @@ class AuthGate extends StatelessWidget {
     );
   }
 }
-
-
 
 class GuestApp extends StatelessWidget {
   const GuestApp({super.key});
@@ -104,10 +108,7 @@ class _GuestNavigationState extends State<GuestNavigation> {
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.shuffle),
-            label: 'Shuffle',
-          ),
+          NavigationDestination(icon: Icon(Icons.shuffle), label: 'Shuffle'),
           NavigationDestination(
             icon: Icon(Icons.live_tv_outlined),
             selectedIcon: Icon(Icons.live_tv),
