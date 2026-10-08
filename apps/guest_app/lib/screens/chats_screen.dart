@@ -1,234 +1,357 @@
 import 'package:flutter/material.dart';
 
+import '../services/chat_service.dart';
 import 'chat_conversation_screen.dart';
 
-class ChatsScreen extends StatelessWidget {
+class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final chats = [
-      {
-        'name': 'Maya',
-        'message': 'That was really fun 😊',
-        'time': '2m',
-        'image': 'https://i.pravatar.cc/300?img=47',
-        'unread': '2',
-      },
-      {
-        'name': 'Sophia',
-        'message': 'Are you joining my live later?',
-        'time': '1h',
-        'image': 'https://i.pravatar.cc/300?img=32',
-        'unread': '0',
-      },
-      {
-        'name': 'Amara',
-        'message': 'See you soon!',
-        'time': 'Yesterday',
-        'image': 'https://i.pravatar.cc/300?img=44',
-        'unread': '0',
-      },
-      {
-        'name': 'Nia',
-        'message': 'Thanks for stopping by!',
-        'time': 'Yesterday',
-        'image': 'https://i.pravatar.cc/300?img=45',
-        'unread': '1',
-      },
-    ];
+  State<ChatsScreen> createState() => _ChatsScreenState();
+}
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Chats',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.search),
-                  ),
-                ],
-              ),
-            ),
+class _ChatsScreenState extends State<ChatsScreen> {
+  final ChatService _chatService = ChatService();
 
-            Expanded(
-              child: ListView.separated(
-                itemCount: chats.length,
-                separatorBuilder: (_, _) => const Divider(
-                  height: 1,
-                  indent: 84,
-                ),
-                itemBuilder: (context, index) {
-                  final chat = chats[index];
+  List<Map<String, dynamic>> _conversations = [];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-                  return _ChatTile(
-                    name: chat['name']!,
-                    message: chat['message']!,
-                    time: chat['time']!,
-                    imageUrl: chat['image']!,
-                    unreadCount: int.parse(chat['unread']!),
-                  );
-                },
-              ),
-            ),
-          ],
+  @override
+  void initState() {
+    super.initState();
+    _loadConversations();
+  }
+
+  Future<void> _loadConversations() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final conversations = await _chatService.getGuestConversations();
+
+      if (!mounted) return;
+
+      setState(() {
+        _conversations = conversations;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatMessageTime(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) {
+      return '';
+    }
+
+    final dateTime = DateTime.tryParse(timestamp);
+
+    if (dateTime == null) {
+      return '';
+    }
+
+    final local = dateTime.toLocal();
+    final now = DateTime.now();
+
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      final hour = local.hour == 0
+          ? 12
+          : local.hour > 12
+          ? local.hour - 12
+          : local.hour;
+
+      final minute = local.minute.toString().padLeft(2, '0');
+      final period = local.hour >= 12 ? 'PM' : 'AM';
+
+      return '$hour:$minute $period';
+    }
+
+    if (local.year == now.year) {
+      return '${local.month}/${local.day}';
+    }
+
+    return '${local.month}/${local.day}/${local.year}';
+  }
+
+  Future<void> _openConversation(Map<String, dynamic> conversation) async {
+    final host = conversation['host'] as Map<String, dynamic>?;
+
+    if (host == null) {
+      return;
+    }
+
+    final conversationId = conversation['id'] as String;
+    final hostId = conversation['host_id'] as String;
+
+    final name = (host['display_name'] as String?)?.trim().isNotEmpty == true
+        ? host['display_name'] as String
+        : 'Host';
+
+    final imageUrl = host['avatar_url'] as String? ?? '';
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatConversationScreen(
+          conversationId: conversationId,
+          hostId: hostId,
+          name: name,
+          imageUrl: imageUrl,
         ),
       ),
     );
+
+    if (!mounted) return;
+
+    await _loadConversations();
   }
-}
-
-class _ChatTile extends StatelessWidget {
-  final String name;
-  final String message;
-  final String time;
-  final String imageUrl;
-  final int unreadCount;
-
-  const _ChatTile({
-    required this.name,
-    required this.message,
-    required this.time,
-    required this.imageUrl,
-    required this.unreadCount,
-  });
-
-  void _openChat(BuildContext context) {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => ChatConversationScreen(
-        name: name,
-        imageUrl: imageUrl,
-      ),
-    ),
-  );
-}
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => _openChat(context),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 14,
-        ),
-        child: Row(
-          children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundImage: NetworkImage(imageUrl),
-                ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Chats')),
+      body: RefreshIndicator(
+        onRefresh: _loadConversations,
+        child: _buildBody(),
+      ),
+    );
+  }
 
-                if (name == 'Maya' || name == 'Nia')
-                  Positioned(
-                    right: 2,
-                    bottom: 2,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF0F0F0F),
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: unreadCount > 0
-                          ? FontWeight.bold
-                          : FontWeight.w600,
+    if (_errorMessage != null) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 300,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.white54,
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    message,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: unreadCount > 0
-                          ? Colors.white
-                          : Colors.white60,
-                      fontWeight: unreadCount > 0
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  time,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white54,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                if (unreadCount > 0)
-                  Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 20,
-                      minHeight: 20,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      unreadCount.toString(),
-                      style: const TextStyle(
-                        fontSize: 11,
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Could not load chats.',
+                      style: TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white60),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _loadConversations,
+                      child: const Text('Try Again'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_conversations.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(
+            height: 300,
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 56,
+                      color: Colors.white38,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'No chats yet',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Start a conversation with a host to see it here.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white60),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _conversations.length,
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 88),
+      itemBuilder: (context, index) {
+        return _buildConversationTile(_conversations[index]);
+      },
+    );
+  }
+
+  Widget _buildConversationTile(Map<String, dynamic> conversation) {
+    final host = conversation['host'] as Map<String, dynamic>?;
+
+    if (host == null) {
+      return const SizedBox.shrink();
+    }
+
+    final name = (host['display_name'] as String?)?.trim().isNotEmpty == true
+        ? host['display_name'] as String
+        : 'Host';
+
+    final username = host['username'] as String?;
+    final imageUrl = host['avatar_url'] as String? ?? '';
+    final isOnline = host['is_online'] == true;
+
+    final latestMessage =
+        conversation['latest_message'] as Map<String, dynamic>?;
+
+    final messageText =
+        (latestMessage?['message'] as String?)?.trim().isNotEmpty == true
+        ? latestMessage!['message'] as String
+        : 'No messages yet';
+
+    final messageTime = _formatMessageTime(
+      latestMessage?['created_at'] as String?,
+    );
+
+    final unreadCount = (conversation['unread_count'] as int?) ?? 0;
+
+    return ListTile(
+      onTap: () => _openConversation(conversation),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      leading: Stack(
+        children: [
+          CircleAvatar(
+            radius: 28,
+            backgroundImage: imageUrl.isNotEmpty
+                ? NetworkImage(imageUrl)
+                : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
+          ),
+          if (isOnline)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.green,
+                  border: Border.all(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    width: 2,
                   ),
-              ],
+                ),
+              ),
+            ),
+        ],
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (messageTime.isNotEmpty)
+            Text(
+              messageTime,
+              style: TextStyle(
+                fontSize: 11,
+                color: unreadCount > 0
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.white54,
+                fontWeight: unreadCount > 0
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+              ),
+            ),
+        ],
+      ),
+      subtitle: Row(
+        children: [
+          Expanded(
+            child: Text(
+              username != null && username.isNotEmpty
+                  ? '@$username · $messageText'
+                  : messageText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: unreadCount > 0 ? Colors.white : Colors.white60,
+                fontWeight: unreadCount > 0
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
+            ),
+          ),
+          if (unreadCount > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                unreadCount > 99 ? '99+' : '$unreadCount',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

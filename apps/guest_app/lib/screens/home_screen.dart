@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/host.dart';
+import '../services/chat_service.dart';
 import '../services/host_service.dart';
+import 'chat_conversation_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -513,6 +515,31 @@ class _RecommendedHostCard extends StatelessWidget {
 
   const _RecommendedHostCard({required this.host});
 
+  Future<void> _openChat(BuildContext context) async {
+    try {
+      final conversation = await ChatService().getOrCreateConversation(host.id);
+
+      if (!context.mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatConversationScreen(
+            conversationId: conversation['id'] as String,
+            hostId: host.id,
+            name: host.displayName,
+            imageUrl: host.avatarUrl ?? '',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -547,20 +574,31 @@ class _RecommendedHostCard extends StatelessWidget {
                     ),
             ),
           ),
-
           const SizedBox(height: 8),
-
           Text(
             host.displayName,
             style: const TextStyle(fontWeight: FontWeight.bold),
             overflow: TextOverflow.ellipsis,
           ),
-
           Text(
             host.username != null && host.username!.isNotEmpty
                 ? '@${host.username}'
                 : 'Host',
             style: const TextStyle(fontSize: 12, color: Colors.white60),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            height: 34,
+            child: OutlinedButton.icon(
+              onPressed: () => _openChat(context),
+              icon: const Icon(Icons.chat_bubble_outline, size: 15),
+              label: const Text('Chat', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
           ),
         ],
       ),
