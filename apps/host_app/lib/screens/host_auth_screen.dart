@@ -1,9 +1,10 @@
+import 'package:calling/calling.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Host login and referral-based signup.
 /// The database validates the referral code and assigns the host role.
-/// Never send a client-selected `role` value.
+/// Never send a client-selected role value.
 class HostAuthScreen extends StatefulWidget {
   const HostAuthScreen({super.key});
 
@@ -12,16 +13,17 @@ class HostAuthScreen extends StatefulWidget {
 }
 
 class _HostAuthScreenState extends State<HostAuthScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _displayNameController = TextEditingController();
-  final _referralCodeController = TextEditingController();
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final CallingService _callingService = CallingService();
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _displayNameController = TextEditingController();
+  final TextEditingController _referralCodeController = TextEditingController();
 
   bool _isLogin = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
-
-  SupabaseClient get _supabase => Supabase.instance.client;
 
   Future<void> _submit() async {
     final email = _emailController.text.trim();
@@ -53,12 +55,68 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
 
     try {
       if (_isLogin) {
-        await _supabase.auth.signInWithPassword(
+        final response = await _supabase.auth.signInWithPassword(
           email: email,
           password: password,
         );
+
+        if (response.session == null) {
+          _showMessage('Login succeeded, but no session was returned.');
+          return;
+        }
+
         if (!mounted) return;
+
         _showMessage('Signed in successfully.');
+
+        try {
+          final result = await _supabase.functions.invoke(
+            'livekit-token',
+            body: <String, dynamic>{},
+          );
+
+          final data = result.data;
+
+          if (result.status != 200 || data is! Map) {
+            _showMessage('Unable to obtain a video connection token.');
+            return;
+          }
+
+          final serverUrl = data['server_url'];
+          final roomName = data['room_name'];
+          final participantToken = data['participant_token'];
+
+          if (serverUrl is! String ||
+              roomName is! String ||
+              participantToken is! String ||
+              serverUrl.isEmpty ||
+              roomName.isEmpty ||
+              participantToken.isEmpty) {
+            _showMessage('The video service returned an invalid response.');
+            return;
+          }
+
+          await _callingService.connect(
+            liveKitUrl: serverUrl,
+            token: participantToken,
+          );
+
+          debugPrint(
+            'LiveKit room connected: '
+            '${_callingService.isConnected}',
+          );
+
+          if (!mounted) return;
+
+          _showMessage('Connected to video room successfully.');
+        } catch (error) {
+          // Never log the participant token or the full response.
+          debugPrint('LiveKit connection failed: ${error.runtimeType}');
+
+          if (!mounted) return;
+
+          _showMessage('Unable to connect to the video room.');
+        }
       } else {
         final response = await _supabase.auth.signUp(
           email: email,
@@ -71,24 +129,32 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
         );
 
         if (!mounted) return;
+
         _showMessage(
           response.session == null
               ? 'Account request accepted. Check your email to verify your account.'
               : 'Host account created successfully.',
         );
       }
-      // The app-level auth/session listener should route signed-in users onward.
+
+      // The app-level auth/session listener should route
+      // signed-in users onward.
     } on AuthException catch (error) {
       _showMessage(error.message);
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Host authentication failed: ${error.runtimeType}');
+
       _showMessage('Something went wrong. Please try again.');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
@@ -178,7 +244,11 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
                     enableSuggestions: false,
                     autocorrect: false,
                     textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _isLoading ? null : _submit(),
+                    onSubmitted: (_) {
+                      if (!_isLoading) {
+                        _submit();
+                      }
+                    },
                     decoration: InputDecoration(
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
