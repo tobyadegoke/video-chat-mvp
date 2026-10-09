@@ -42,11 +42,7 @@ class _HomePageState extends State<HomePage> {
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => VideoRoomPage(
-          roomName: roomName,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => VideoRoomPage(roomName: roomName)),
     );
   }
 
@@ -61,10 +57,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               const Text(
                 'Video Chat MVP',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
 
               const SizedBox(height: 30),
@@ -94,10 +87,7 @@ class _HomePageState extends State<HomePage> {
 class VideoRoomPage extends StatefulWidget {
   final String roomName;
 
-  const VideoRoomPage({
-    super.key,
-    required this.roomName,
-  });
+  const VideoRoomPage({super.key, required this.roomName});
 
   @override
   State<VideoRoomPage> createState() => _VideoRoomPageState();
@@ -117,26 +107,22 @@ class _VideoRoomPageState extends State<VideoRoomPage> {
     try {
       final newRoom = Room();
 
-const liveKitUrl =
-    'wss://video-chat-mvp-raq8joq9.livekit.cloud';
+      const liveKitUrl = 'wss://video-chat-mvp-raq8joq9.livekit.cloud';
 
-const token =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJBUEloTU1ocVRIZThtYXUiLCJzdWIiOiJob3N0LXRvYmkiLCJleHAiOjE3ODcyNzgzMzAsIm5iZiI6MTc4NzE5MTkzMCwiaWF0IjoxNzg3MTkxOTMwLCJpZGVudGl0eSI6Imhvc3QtdG9iaSIsIm5hbWUiOiJob3N0LXRvYmkiLCJ2aWRlbyI6eyJyb29tSm9pbiI6dHJ1ZSwicm9vbSI6InRlc3Qtcm9vbSJ9fQ.c0WptElu0NR7HxIJ5Znajl0o4_83mEtDKlmUupPSfzM';
+      // Temporary placeholder: obtain a token from a trusted backend
+      // before enabling LiveKit connections.
+      const token = '';
 
-await newRoom.connect(
-  liveKitUrl,
-  token,
-);
+      await newRoom.connect(liveKitUrl, token);
 
-final localParticipant = newRoom.localParticipant;
+      final localParticipant = newRoom.localParticipant;
 
-if (localParticipant == null) {
-  throw Exception('Local participant was not created');
-}
+      if (localParticipant == null) {
+        throw Exception('Local participant was not created');
+      }
 
-await localParticipant.setCameraEnabled(true);
-await localParticipant.setMicrophoneEnabled(true);
-
+      await localParticipant.setCameraEnabled(true);
+      await localParticipant.setMicrophoneEnabled(true);
 
       setState(() {
         room = newRoom;
@@ -171,88 +157,72 @@ await localParticipant.setMicrophoneEnabled(true);
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Room: ${widget.roomName}'),
-      ),
+      appBar: AppBar(title: Text('Room: ${widget.roomName}')),
       body: Column(
-  children: [
-    Expanded(
-      child: Container(
-        width: double.infinity,
-        color: Colors.black,
-        child: room != null
-            ? buildLocalVideo()
-            : const Center(
-                child: Text(
-                  'Not connected',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-      ),
-    ),
-
-    Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
         children: [
-          Text(status),
-
-          const SizedBox(height: 20),
-
-          if (room == null)
-            ElevatedButton(
-              onPressed:
-                  isConnecting ? null : connectToRoom,
-              child: Text(
-                isConnecting
-                    ? 'Connecting...'
-                    : 'Connect Camera',
-              ),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              color: Colors.black,
+              child: room != null
+                  ? buildLocalVideo()
+                  : const Center(
+                      child: Text(
+                        'Not connected',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
             ),
+          ),
 
-          if (room != null)
-            ElevatedButton(
-              onPressed: disconnect,
-              child: const Text('Leave Room'),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Text(status),
+
+                const SizedBox(height: 20),
+
+                if (room == null)
+                  ElevatedButton(
+                    onPressed: isConnecting ? null : connectToRoom,
+                    child: Text(
+                      isConnecting ? 'Connecting...' : 'Connect Camera',
+                    ),
+                  ),
+
+                if (room != null)
+                  ElevatedButton(
+                    onPressed: disconnect,
+                    child: const Text('Leave Room'),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
-    ),
-  ],
-),
     );
   }
 
-Widget buildLocalVideo() {
-  final localParticipant = room?.localParticipant;
+  Widget buildLocalVideo() {
+    final localParticipant = room?.localParticipant;
 
-  if (localParticipant == null) {
-    return const Center(
-      child: Text('Camera not available'),
-    );
+    if (localParticipant == null) {
+      return const Center(child: Text('Camera not available'));
+    }
+
+    final publications = localParticipant.videoTrackPublications;
+
+    if (publications.isEmpty) {
+      return const Center(child: Text('Waiting for camera...'));
+    }
+
+    final videoTrack = publications.first.track;
+
+    if (videoTrack is! LocalVideoTrack) {
+      return const Center(child: Text('Waiting for camera...'));
+    }
+
+    return VideoTrackRenderer(videoTrack, fit: VideoViewFit.cover);
   }
-
-  final publications =
-      localParticipant.videoTrackPublications;
-
-  if (publications.isEmpty) {
-    return const Center(
-      child: Text('Waiting for camera...'),
-    );
-  }
-
-  final videoTrack = publications.first.track;
-
-  if (videoTrack is! LocalVideoTrack) {
-    return const Center(
-      child: Text('Waiting for camera...'),
-    );
-  }
-
-return VideoTrackRenderer(
-  videoTrack,
-  fit: VideoViewFit.cover,
-);
-}
-
 }

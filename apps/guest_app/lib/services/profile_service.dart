@@ -25,9 +25,9 @@ class ProfileService {
     return Profile.fromMap(data);
   }
 
+  /// Updates editable profile fields only. Username and role are server-managed.
   Future<void> updateProfile({
     required String displayName,
-    required String username,
     required String bio,
   }) async {
     final user = _supabase.auth.currentUser;
@@ -40,7 +40,6 @@ class ProfileService {
         .from('profiles')
         .update({
           'display_name': displayName,
-          'username': username,
           'bio': bio,
           'updated_at': DateTime.now().toIso8601String(),
         })

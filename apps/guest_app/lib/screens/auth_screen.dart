@@ -47,20 +47,13 @@ class _AuthScreenState extends State<AuthScreen> {
         await _supabase.auth.signUp(
           email: email,
           password: password,
-          data: {
-            'display_name': displayName,
-          },
+          data: {'display_name': displayName},
         );
       }
 
       if (!mounted) return;
 
-     _showMessage(
-  _isLogin
-      ? 'Welcome back!'
-      : 'Account created!',
-);
-      
+      _showMessage(_isLogin ? 'Welcome back!' : 'Account created!');
     } on AuthException catch (error) {
       _showMessage(error.message);
     } catch (_) {
@@ -77,9 +70,8 @@ class _AuthScreenState extends State<AuthScreen> {
   void _showMessage(String message) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -124,9 +116,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ? 'Sign in to continue'
                       : 'Join and start connecting with hosts',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                  ),
+                  style: const TextStyle(color: Colors.white60),
                 ),
 
                 const SizedBox(height: 36),
@@ -176,13 +166,9 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? const SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                            ),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(
-                            _isLogin ? 'Log In' : 'Create Account',
-                          ),
+                        : Text(_isLogin ? 'Log In' : 'Create Account'),
                   ),
                 ),
 
