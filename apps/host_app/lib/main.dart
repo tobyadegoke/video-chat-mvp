@@ -128,7 +128,10 @@ class HostAuthGate extends StatelessWidget {
 /// Host availability controls only request the supported host RPCs.
 /// Busy/Live transitions remain the responsibility of trusted backend events.
 class HostSignedInScreen extends StatefulWidget {
-  const HostSignedInScreen({super.key});
+  const HostSignedInScreen({super.key, this.presenceService});
+
+  @visibleForTesting
+  final HostPresenceService? presenceService;
 
   @override
   State<HostSignedInScreen> createState() => _HostSignedInScreenState();
@@ -136,7 +139,8 @@ class HostSignedInScreen extends StatefulWidget {
 
 class _HostSignedInScreenState extends State<HostSignedInScreen>
     with WidgetsBindingObserver {
-  final HostPresenceService _presence = HostPresenceService();
+  late final HostPresenceService _presence =
+      widget.presenceService ?? HostPresenceService();
 
   Timer? _heartbeatTimer;
   Timer? _countdownTimer;
