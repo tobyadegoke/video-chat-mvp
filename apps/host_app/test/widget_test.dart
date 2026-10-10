@@ -36,6 +36,7 @@ void main() {
     );
     await tester.pump();
 
+    await tester.ensureVisible(find.text('Renew Away'));
     await tester.tap(find.text('Renew Away'));
     await tester.pump();
 
@@ -50,6 +51,7 @@ class _FakeHostPresenceService extends HostPresenceService {
           client: SupabaseClient(
             'https://example.supabase.co',
             'test-anon-key',
+            authOptions: const AuthClientOptions(autoRefreshToken: false),
           ),
         );
 
