@@ -2,8 +2,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Client operations for the signed-in host's presence row.
 ///
-/// Automatic status transitions (available/busy/live/offline) must be made by
-/// trusted backend code. This client only sends a heartbeat and requests Away.
+/// Available and Away are explicit, host-authenticated requests. Busy and Live
+/// transitions remain restricted to trusted backend event handlers. This client
+/// also sends a heartbeat while the host app is active.
 class HostPresenceService {
   HostPresenceService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
