@@ -19,13 +19,6 @@ class HostPresenceService {
     return HostPresence.fromMap(response);
   }
 
-  Future<void> updateHeartbeat(String hostId) async {
-    await _client
-        .from('host_presence')
-        .update({'last_seen_at': DateTime.now().toUtc().toIso8601String()})
-        .eq('host_id', hostId);
-  }
-
   Future<List<HostPresence>> getAvailableHosts() async {
     final response = await _client
         .from('host_presence')
