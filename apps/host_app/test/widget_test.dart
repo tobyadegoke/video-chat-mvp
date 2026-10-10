@@ -36,15 +36,13 @@ void main() {
     );
     await tester.pump();
 
-    await tester.scrollUntilVisible(
-      find.text('Renew Away'),
-      300,
-      scrollable: find.descendant(
-        of: find.byType(ListView),
-        matching: find.byType(Scrollable),
-      ),
+    final renewAwayButton = find.ancestor(
+      of: find.text('Renew Away'),
+      matching: find.byType(OutlinedButton),
     );
-    await tester.tap(find.text('Renew Away'));
+    await tester.ensureVisible(renewAwayButton);
+    await tester.pumpAndSettle();
+    await tester.tap(renewAwayButton);
     await tester.pump();
 
     expect(presence.awayRequests, 1);
