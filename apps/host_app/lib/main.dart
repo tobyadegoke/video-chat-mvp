@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -188,7 +187,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         _awayUntil = _parseAwayUntil(row?['away_until']);
         _expiryRefreshRequested = false;
         _lastRefreshed = DateTime.now();
-        _error = presenceError ??
+        _error =
+            presenceError ??
             (row == null
                 ? 'Your presence record is missing. The reviewed database migration must be applied before availability controls can work.'
                 : null);
@@ -220,13 +220,10 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) {
-        unawaited(_sendHeartbeat());
-        unawaited(_refreshPresence());
-      },
-    );
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(_sendHeartbeat());
+      unawaited(_refreshPresence());
+    });
   }
 
   Future<void> _sendHeartbeat() async {
@@ -235,7 +232,9 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
       await _presence.sendHeartbeat();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = 'Presence heartbeat failed: ${_friendlyError(error)}');
+      setState(
+        () => _error = 'Presence heartbeat failed: ${_friendlyError(error)}',
+      );
     }
   }
 
@@ -252,7 +251,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         _status = nextStatus;
         _awayUntil = nextAwayUntil;
         _lastRefreshed = DateTime.now();
-        _expiryRefreshRequested = nextStatus == 'away' &&
+        _expiryRefreshRequested =
+            nextStatus == 'away' &&
             nextAwayUntil != null &&
             !DateTime.now().isBefore(nextAwayUntil);
         _error = row == null
@@ -289,8 +289,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
       return;
     }
 
-    if (_expiryRefreshRequested &&
-        !DateTime.now().isBefore(_awayUntil!)) {
+    if (_expiryRefreshRequested && !DateTime.now().isBefore(_awayUntil!)) {
       _countdownTimer?.cancel();
       _countdownTimer = null;
       return;
@@ -365,8 +364,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
     });
 
     try {
-      final result =
-          await _presence.requestAway(durationMinutes: _awayMinutes);
+      final result = await _presence.requestAway(durationMinutes: _awayMinutes);
       if (!mounted) return;
       setState(() {
         _status = result['status'] as String? ?? 'away';
@@ -377,7 +375,9 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
       });
       _syncCountdownTimer();
       _showMessage(
-        _status == 'away' ? 'Away renewed for $_awayMinutes minutes.' : 'Away enabled.',
+        _status == 'away'
+            ? 'Away renewed for $_awayMinutes minutes.'
+            : 'Away enabled.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -388,15 +388,15 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
   }
 
   String _friendlyError(Object error) {
-    return error.toString().replaceFirst(RegExp(r'^(Exception|Bad state): '), '');
+    return error.toString().replaceFirst(
+      RegExp(r'^(Exception|Bad state): '),
+      '',
+    );
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -501,9 +501,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (!_isHost) {
@@ -530,8 +528,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                     ),
                     const SizedBox(height: 8),
                     TextButton(
-                      onPressed: () =>
-                          Supabase.instance.client.auth.signOut(),
+                      onPressed: () => Supabase.instance.client.auth.signOut(),
                       child: const Text('Sign out'),
                     ),
                   ],
@@ -556,7 +553,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: _accent.withOpacity(0.16),
+                color: _accent.withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -625,17 +622,14 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                 Text(
                   'Welcome back, ${(_displayName?.trim().isNotEmpty ?? false) ? _displayName!.trim() : 'Creator'}',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.7,
-                      ),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7,
+                  ),
                 ),
                 const SizedBox(height: 7),
                 const Text(
                   'Your space. Your schedule. You’re in control.',
-                  style: TextStyle(
-                    color: Color(0xFF9299A8),
-                    fontSize: 14,
-                  ),
+                  style: TextStyle(color: Color(0xFF9299A8), fontSize: 14),
                 ),
                 const SizedBox(height: 24),
                 _buildStatusCard(statusColor),
@@ -649,9 +643,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                     Expanded(
                       child: Text(
                         'Availability',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                     ),
                     Text(
@@ -700,7 +693,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         border: Border.all(color: const Color(0xFF34384D)),
         boxShadow: [
           BoxShadow(
-            color: _accent.withOpacity(0.07),
+            color: _accent.withValues(alpha: 0.07),
             blurRadius: 30,
             offset: const Offset(0, 12),
           ),
@@ -716,7 +709,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                 width: 54,
                 height: 54,
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.13),
+                  color: statusColor.withValues(alpha: 0.13),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Icon(_statusIcon(), color: statusColor, size: 27),
@@ -763,10 +756,10 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFC66D).withOpacity(0.09),
+                color: const Color(0xFFFFC66D).withValues(alpha: 0.09),
                 borderRadius: BorderRadius.circular(15),
                 border: Border.all(
-                  color: const Color(0xFFFFC66D).withOpacity(0.2),
+                  color: const Color(0xFFFFC66D).withValues(alpha: 0.2),
                 ),
               ),
               child: Row(
@@ -820,9 +813,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton(
-            onPressed: canRequestAvailable &&
-                    !_requestingAvailable &&
-                    !_requestingAway
+            onPressed:
+                canRequestAvailable && !_requestingAvailable && !_requestingAway
                 ? _requestAvailable
                 : null,
             child: _requestingAvailable
@@ -840,8 +832,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                         _status == 'available'
                             ? 'You’re Available'
                             : _status == 'busy' || _status == 'live'
-                                ? 'Active session in progress'
-                                : 'Go Available',
+                            ? 'Active session in progress'
+                            : 'Go Available',
                       ),
                     ],
                   ),
@@ -849,7 +841,11 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
           const SizedBox(height: 20),
           const Row(
             children: [
-              Icon(Icons.pause_circle_outline_rounded, size: 18, color: _accent),
+              Icon(
+                Icons.pause_circle_outline_rounded,
+                size: 18,
+                color: _accent,
+              ),
               SizedBox(width: 8),
               Text(
                 'Take a break',
@@ -878,9 +874,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                 .map(
                   (minutes) => DropdownMenuItem<int>(
                     value: minutes,
-                    child: Text(
-                      '$minutes minute${minutes == 1 ? '' : 's'}',
-                    ),
+                    child: Text('$minutes minute${minutes == 1 ? '' : 's'}'),
                   ),
                 )
                 .toList(),
@@ -894,9 +888,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: canRequestAway &&
-                    !_requestingAway &&
-                    !_requestingAvailable
+            onPressed:
+                canRequestAway && !_requestingAway && !_requestingAvailable
                 ? _requestAway
                 : null,
             child: _requestingAway
