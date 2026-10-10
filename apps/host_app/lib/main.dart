@@ -186,9 +186,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         _displayName = profile?['display_name'] as String?;
         _status = row?['status'] as String?;
         _awayUntil = _parseAwayUntil(row?['away_until']);
-        _expiryRefreshRequested = _status == 'away' &&
-            _awayUntil != null &&
-            !DateTime.now().isBefore(_awayUntil!);
+        _expiryRefreshRequested = false;
         _lastRefreshed = DateTime.now();
         _error = presenceError ??
             (row == null
@@ -270,7 +268,10 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
 
   Future<void> _manualRefresh() async {
     if (_refreshing) return;
-    setState(() => _refreshing = true);
+    setState(() {
+      _refreshing = true;
+      _expiryRefreshRequested = false;
+    });
     await _refreshPresence();
     if (mounted) setState(() => _refreshing = false);
   }
@@ -288,16 +289,27 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
       return;
     }
 
+    if (_expiryRefreshRequested &&
+        !DateTime.now().isBefore(_awayUntil!)) {
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      return;
+    }
+
     if (_countdownTimer != null) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || !_appActive) return;
-      setState(() {});
       if (!_expiryRefreshRequested &&
           _awayUntil != null &&
           !DateTime.now().isBefore(_awayUntil!)) {
         _expiryRefreshRequested = true;
+        _countdownTimer?.cancel();
+        _countdownTimer = null;
+        setState(() {});
         unawaited(_refreshPresence());
+        return;
       }
+      setState(() {});
     });
   }
 
