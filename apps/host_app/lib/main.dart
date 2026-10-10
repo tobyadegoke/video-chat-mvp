@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -172,6 +173,9 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
         _displayName = profile?['display_name'] as String?;
         _status = row?['status'] as String?;
         _awayUntil = _parseAwayUntil(row?['away_until']);
+        _expiryRefreshRequested = _status == 'away' &&
+            _awayUntil != null &&
+            !DateTime.now().isBefore(_awayUntil!);
         _lastRefreshed = DateTime.now();
         _error = row == null
             ? 'Your presence record is missing. The reviewed database migration must be applied before availability controls can work.'
@@ -230,11 +234,15 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
       final row = await _presence.getCurrentPresence();
       if (!mounted) return;
 
+      final nextStatus = row?['status'] as String?;
+      final nextAwayUntil = _parseAwayUntil(row?['away_until']);
       setState(() {
-        _status = row?['status'] as String?;
-        _awayUntil = _parseAwayUntil(row?['away_until']);
+        _status = nextStatus;
+        _awayUntil = nextAwayUntil;
         _lastRefreshed = DateTime.now();
-        _expiryRefreshRequested = false;
+        _expiryRefreshRequested = nextStatus == 'away' &&
+            nextAwayUntil != null &&
+            !DateTime.now().isBefore(nextAwayUntil);
         _error = row == null
             ? 'Your presence record is missing. Apply the reviewed database migration before using availability controls.'
             : null;
