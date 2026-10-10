@@ -29,6 +29,18 @@ Branch: `priority-1/host-presence-foundation`
 6. The migration enables `pg_cron`. The current live-project check reported it is not installed. Check `pg_available_extensions` to confirm it is offered by this project, then verify that the SQL Editor role can enable it and schedule a job. If extension creation or scheduling fails, the transaction should fail; do not remove the scheduler portion and assume expiry is running.
 7. The confirmed policy is a 15-minute default Away duration and a one-hour maximum.
 
+## Remaining lifecycle integration
+
+| Status | Trusted transition source | State on this branch |
+| --- | --- | --- |
+| Available | Host explicitly requests availability; the database validates the caller's host role and current status. | Wired through `request_host_available()` and the dashboard's **Go Available** action. |
+| Away | Host requests a bounded Away duration. | Wired through `request_host_away(minutes)`; expiry is scheduled. |
+| Offline | Available host heartbeat is stale for two minutes. | Wired through the scheduled `expire_away_hosts()` job. A suspended app may stop heartbeats and be marked Offline. |
+| Busy | A direct call is accepted and the host's call session is active. | Not wired. The repository has no call lifecycle or trusted event handler. |
+| Live | The host's broadcast session is confirmed and the host is publishing media. | Not wired. The repository has no broadcast lifecycle or tracked LiveKit token Edge Function source. |
+
+For Busy and Live, wire a trusted server handler to the actual call/broadcast lifecycle and call `set_host_automatic_status()`. A token being issued is not proof of a connected participant or an active broadcast. If using LiveKit webhooks, validate the webhook before trusting it and handle retries idempotently; LiveKit documents participant join/leave and track publish/unpublish events as server-side webhook events ([webhook and event docs](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/)).
+
 ## Suggested preflight
 
 Run these read-only checks before applying:
