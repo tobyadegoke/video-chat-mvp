@@ -868,7 +868,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
           ),
           const SizedBox(height: 15),
           DropdownButtonFormField<int>(
-            value: _awayMinutes,
+            initialValue: _awayMinutes,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Away duration',
