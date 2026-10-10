@@ -6,7 +6,9 @@ import '../services/host_service.dart';
 import 'chat_conversation_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.onSeeAllLive});
+
+  final VoidCallback? onSeeAllLive;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -157,14 +159,17 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 32),
 
               // LIVE NOW
-              const Row(
+              Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     '🔴 Live Now',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  Text('See all', style: TextStyle(color: Colors.redAccent)),
+                  TextButton(
+                    onPressed: widget.onSeeAllLive,
+                    child: const Text('See all'),
+                  ),
                 ],
               ),
 
