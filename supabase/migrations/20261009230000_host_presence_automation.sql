@@ -155,6 +155,12 @@ BEGIN
       USING ERRCODE = '55000';
   END IF;
 
+  IF v_current_status IS DISTINCT FROM 'available'
+     AND v_current_status IS DISTINCT FROM 'away' THEN
+    RAISE EXCEPTION 'Only an available host can set or renew Away.'
+      USING ERRCODE = '55000';
+  END IF;
+
   INSERT INTO public.host_presence (
     host_id, status, away_until, last_seen_at, updated_at
   )
@@ -289,6 +295,14 @@ $function$;
 -- arbitrary presence rows or setting automatic statuses directly. Heartbeats
 -- remain possible on the caller's own row through last_seen_at only.
 REVOKE INSERT, UPDATE ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
+-- Also revoke any column-level grants that a prior policy/permission setup may
+-- have left behind; table-level REVOKE alone does not remove those grants.
+REVOKE INSERT (
+  id, host_id, status, away_until, last_seen_at, updated_at, created_at
+) ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
+REVOKE UPDATE (
+  id, host_id, status, away_until, updated_at, created_at
+) ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.host_presence TO authenticated;
 GRANT UPDATE (last_seen_at) ON TABLE public.host_presence TO authenticated;
 
