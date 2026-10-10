@@ -19,15 +19,6 @@ class HostPresenceService {
     return HostPresence.fromMap(response);
   }
 
-  Future<void> setStatus(String hostId, HostStatus status) async {
-    await _client.from('host_presence').upsert({
-      'host_id': hostId,
-      'status': status.value,
-      'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'host_id');
-  }
-
   Future<void> updateHeartbeat(String hostId) async {
     await _client
         .from('host_presence')
