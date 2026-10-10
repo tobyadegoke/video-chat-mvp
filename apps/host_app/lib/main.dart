@@ -85,6 +85,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
   String? _error;
   bool _loading = true;
   bool _requestingAway = false;
+  bool _requestingAvailable = false;
   int _awayMinutes = 15;
   bool _isHost = false;
   bool _appActive = true;
@@ -173,6 +174,32 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
     }
   }
 
+  Future<void> _requestAvailable() async {
+    if (_status != 'offline' && _status != 'away') return;
+
+    setState(() {
+      _requestingAvailable = true;
+      _error = null;
+    });
+
+    try {
+      final result = await _presence.requestAvailable();
+      if (!mounted) return;
+      setState(() {
+        _status = result['status'] as String? ?? 'available';
+        _error = null;
+      });
+      _startHeartbeat();
+      unawaited(_sendHeartbeat());
+      _showMessage('You are now Available.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = _friendlyError(error));
+    } finally {
+      if (mounted) setState(() => _requestingAvailable = false);
+    }
+  }
+
   Future<void> _requestAway() async {
     if (_status != 'available' && _status != 'away') return;
 
@@ -220,6 +247,7 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
   @override
   Widget build(BuildContext context) {
     final canRequestAway = _status == 'available' || _status == 'away';
+    final canRequestAvailable = _status == 'offline' || _status == 'away';
 
     return Scaffold(
       appBar: AppBar(
@@ -272,11 +300,33 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Availability is managed by the trusted backend. '
-                            'Signing in does not automatically make you Available.',
+                            'Choose Go Available when you are ready to receive calls. '
+                            'Busy and Live are set by trusted backend events.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),
+                          FilledButton(
+                            onPressed: canRequestAvailable &&
+                                    !_requestingAvailable
+                                ? _requestAvailable
+                                : null,
+                            child: _requestingAvailable
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    _status == 'available'
+                                        ? 'Available'
+                                        : canRequestAvailable
+                                            ? 'Go Available'
+                                            : 'Finish the active session first',
+                                  ),
+                          ),
+                          const SizedBox(height: 16),
                           DropdownButtonFormField<int>(
                             value: _awayMinutes,
                             decoration: const InputDecoration(
@@ -291,7 +341,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                                   ),
                                 )
                                 .toList(),
-                            onChanged: _requestingAway
+                            onChanged: _requestingAway ||
+                                    _requestingAvailable
                                 ? null
                                 : (value) {
                                     if (value != null) {
@@ -301,7 +352,9 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
                           ),
                           const SizedBox(height: 12),
                           FilledButton(
-                            onPressed: canRequestAway && !_requestingAway
+                            onPressed: canRequestAway &&
+                                    !_requestingAway &&
+                                    !_requestingAvailable
                                 ? _requestAway
                                 : null,
                             child: _requestingAway
