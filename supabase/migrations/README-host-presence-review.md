@@ -10,7 +10,7 @@ Branch: `priority-1/host-presence-foundation`
 - Normalizes invalid/null statuses to `offline`, enforces the five supported statuses, and requires `away_until` only for `away`.
 - Backfills missing presence rows for existing host profiles. A host without a presence row is not assumed to be online.
 - Updates `public.handle_new_user()` without removing referral validation, generated usernames, or host referral attribution. New host registrations get an `offline` presence row.
-- Adds `request_host_away(minutes)`, available to authenticated users but limited to their own host account. Default duration is **30 minutes**; allowed range is **1–240 minutes**.
+- Adds `request_host_away(minutes)`, available to authenticated users but limited to their own host account. Default duration is **15 minutes**; allowed range is **1–60 minutes**.
 - Adds `set_host_automatic_status(host_id, status)` for trusted backend transitions only (`offline`, `available`, `busy`, `live`).
 - Adds `expire_away_hosts()` and schedules it once per minute using `pg_cron`. An expired Away becomes Live if `profiles.is_live` is true, Available only if the host heartbeat is no older than two minutes, and Offline otherwise.
 - Removes direct authenticated INSERT/UPDATE access to `host_presence`, while allowing authenticated users to update only `last_seen_at` on their own row through the existing RLS policy. Status changes should go through the RPCs.
@@ -21,7 +21,7 @@ Branch: `priority-1/host-presence-foundation`
 2. Existing `HostPresenceService.setStatus()` currently uses a direct upsert. After this migration, that direct write will be denied. Update the app to use `request_host_away` for Away and trusted server-side transitions for automatic states before relying on that service.
 3. Away expiry depends on a recent `host_presence.last_seen_at` heartbeat. The host app must send heartbeats while the session is active. Without a heartbeat, expiry deliberately chooses Offline rather than incorrectly advertising the host as Available.
 4. The migration enables `pg_cron`. If the project/role cannot enable that extension, the transaction should fail; do not remove the scheduler portion and assume expiry is running.
-5. The 30-minute default and four-hour maximum are proposed defaults because no duration policy had been specified yet. Confirm these values before applying to production.
+5. The confirmed policy is a 15-minute default Away duration and a one-hour maximum.
 
 ## Suggested preflight
 
