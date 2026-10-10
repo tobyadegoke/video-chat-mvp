@@ -81,13 +81,19 @@ class GuestNavigation extends StatefulWidget {
 class _GuestNavigationState extends State<GuestNavigation> {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    ShuffleScreen(),
-    LiveScreen(),
-    ChatsScreen(),
-    ProfileScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      HomeScreen(onSeeAllLive: () => _onItemTapped(2)),
+      const ShuffleScreen(),
+      const LiveScreen(),
+      const ChatsScreen(),
+      const ProfileScreen(),
+    ];
+  }
 
   void _onItemTapped(int index) {
     setState(() {
