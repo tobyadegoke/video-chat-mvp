@@ -18,6 +18,7 @@ Branch: `priority-1/host-presence-foundation`
 
 ## Important limitations before applying
 
+0. The host login flow no longer connects to LiveKit automatically. Sign-in now routes to the existing placeholder host screen; an explicit call/broadcast action and presence lifecycle still need to be implemented there.
 1. This migration creates the database foundation, but **automatic status changes are not fully wired to the app yet**. The host app and trusted backend still need to call `set_host_automatic_status` when app sessions, direct calls, and broadcasts start/end.
 2. Existing `HostPresenceService.setStatus()` currently uses a direct upsert. After this migration, that direct write will be denied. Update the app to use `request_host_away` for Away and trusted server-side transitions for automatic states before relying on that service.
 3. Away expiry depends on a recent `host_presence.last_seen_at` heartbeat. The host app must send heartbeats while the session is active. Without a heartbeat, expiry deliberately chooses Offline rather than incorrectly advertising the host as Available.
