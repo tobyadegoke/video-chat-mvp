@@ -1,30 +1,99 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:host_app/main.dart';
+import 'package:host_app/services/host_presence_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const HostApp());
+  testWidgets('shows host availability and timed Away controls',
+      (WidgetTester tester) async {
+    final presence = _FakeHostPresenceService();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: HostSignedInScreen(presenceService: presence),
+      ),
+    );
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Welcome back, Demo Host'), findsOneWidget);
+    expect(find.text('You’re Away'), findsOneWidget);
+    expect(find.text('Away time remaining'), findsOneWidget);
+    expect(find.text('Renew Away'), findsOneWidget);
+    expect(find.text('Away duration'), findsOneWidget);
   });
+
+  testWidgets('renews Away through the presence service',
+      (WidgetTester tester) async {
+    final presence = _FakeHostPresenceService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: HostSignedInScreen(presenceService: presence),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Renew Away'));
+    await tester.pump();
+
+    expect(presence.awayRequests, 1);
+    expect(find.text('Away renewed for 15 minutes.'), findsOneWidget);
+  });
+}
+
+class _FakeHostPresenceService extends HostPresenceService {
+  _FakeHostPresenceService()
+      : super(
+          client: SupabaseClient(
+            'https://example.supabase.co',
+            'test-anon-key',
+          ),
+        );
+
+  int awayRequests = 0;
+
+  @override
+  Future<String> requireHostRole() async => 'test-host-id';
+
+  @override
+  Future<Map<String, dynamic>?> getCurrentHostProfile() async =>
+      {'display_name': 'Demo Host'};
+
+  @override
+  Future<Map<String, dynamic>?> getCurrentPresence() async => {
+        'host_id': 'test-host-id',
+        'status': 'away',
+        'away_until': DateTime.now()
+            .add(const Duration(minutes: 2))
+            .toUtc()
+            .toIso8601String(),
+        'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+
+  @override
+  Future<void> sendHeartbeat() async {}
+
+  @override
+  Future<Map<String, dynamic>> requestAvailable() async => {
+        'host_id': 'test-host-id',
+        'status': 'available',
+        'away_until': null,
+      };
+
+  @override
+  Future<Map<String, dynamic>> requestAway({int durationMinutes = 15}) async {
+    awayRequests++;
+    return {
+      'host_id': 'test-host-id',
+      'status': 'away',
+      'away_until': DateTime.now()
+          .add(Duration(minutes: durationMinutes))
+          .toUtc()
+          .toIso8601String(),
+    };
+  }
 }
