@@ -13,7 +13,8 @@ Branch: `priority-1/host-presence-foundation`
 - Adds `request_host_away(minutes)`, available to authenticated users but limited to their own host account. Default duration is **15 minutes**; allowed range is **1–60 minutes**.
 - Adds `set_host_automatic_status(host_id, status)` for trusted backend transitions only (`offline`, `available`, `busy`, `live`).
 - Adds `expire_away_hosts()` and schedules it once per minute using `pg_cron`. An expired Away becomes Live if `profiles.is_live` is true, Available only if the host heartbeat is no older than two minutes, and Offline otherwise.
-- Removes direct authenticated INSERT/UPDATE access to `host_presence`, while allowing authenticated users to update only `last_seen_at` on their own row through the existing RLS policy. Status changes should go through the RPCs.
+- Removes direct authenticated INSERT/UPDATE access to `host_presence`, explicitly revoking both table-level and column-level INSERT/UPDATE grants, while allowing authenticated users to update only `last_seen_at` on their own row through the existing RLS policy. Status changes should go through the RPCs.
+- `request_host_away` only allows Away to be started or renewed from Available/Away; Offline, Busy, and Live are rejected. A host can renew Away immediately while already Away.
 
 ## Important limitations before applying
 
