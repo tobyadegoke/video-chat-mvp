@@ -32,11 +32,20 @@ class HostPresenceService {
     return userId;
   }
 
+  Future<Map<String, dynamic>?> getCurrentHostProfile() async {
+    final userId = await requireHostRole();
+    return _client
+        .from('profiles')
+        .select('display_name')
+        .eq('id', userId)
+        .maybeSingle();
+  }
+
   Future<Map<String, dynamic>?> getCurrentPresence() async {
     final userId = await requireHostRole();
     return _client
         .from('host_presence')
-        .select('host_id,status,last_seen_at,updated_at')
+        .select('host_id,status,away_until,last_seen_at,updated_at')
         .eq('host_id', userId)
         .maybeSingle();
   }
