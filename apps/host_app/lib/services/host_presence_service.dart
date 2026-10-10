@@ -49,7 +49,19 @@ class HostPresenceService {
         .eq('host_id', userId);
   }
 
-  /// Away is the only status a host may explicitly request.
+  /// Requests Available through the authenticated, host-only database RPC.
+  /// The database rejects requests that would override Busy or Live.
+  Future<Map<String, dynamic>> requestAvailable() async {
+    final result = await _client.rpc('request_host_available');
+
+    if (result is! Map) {
+      throw StateError('The server returned an invalid Available response.');
+    }
+
+    return Map<String, dynamic>.from(result);
+  }
+
+  /// Away is the only other status a host may explicitly request.
   /// The database enforces the 1–60 minute range and eligibility rules.
   Future<Map<String, dynamic>> requestAway({int durationMinutes = 15}) async {
     final result = await _client.rpc(
