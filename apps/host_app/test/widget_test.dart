@@ -39,7 +39,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Renew Away'),
       300,
-      scrollable: find.byType(ListView),
+      scrollable: find.byType(Scrollable),
     );
     await tester.tap(find.text('Renew Away'));
     await tester.pump();
