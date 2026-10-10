@@ -128,11 +128,13 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  -- Read the role first without taking a row lock. Then lock presence before
+  -- the profile row, matching the lock order used by automatic transitions and
+  -- expiry to reduce deadlock risk.
   SELECT p.role, p.is_live
     INTO v_role, v_is_live
   FROM public.profiles p
-  WHERE p.id = v_user_id
-  FOR UPDATE;
+  WHERE p.id = v_user_id;
 
   IF v_role IS DISTINCT FROM 'host' THEN
     RAISE EXCEPTION 'Only host accounts can set Away.'
@@ -143,6 +145,12 @@ BEGIN
     INTO v_current_status
   FROM public.host_presence hp
   WHERE hp.host_id = v_user_id
+  FOR UPDATE;
+
+  SELECT p.is_live
+    INTO v_is_live
+  FROM public.profiles p
+  WHERE p.id = v_user_id
   FOR UPDATE;
 
   IF COALESCE(v_is_live, false) OR v_current_status = 'live' THEN
