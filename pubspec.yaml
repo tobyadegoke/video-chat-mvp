@@ -11,8 +11,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.17.2
-  calling:
-    path: packages/calling
+  host_app:
+    path: apps/host_app
 
 dev_dependencies:
   flutter_test:
