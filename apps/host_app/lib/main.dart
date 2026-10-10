@@ -165,7 +165,16 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
     try {
       await _presence.requireHostRole();
       final profile = await _presence.getCurrentHostProfile();
-      final row = await _presence.getCurrentPresence();
+
+      Map<String, dynamic>? row;
+      String? presenceError;
+      try {
+        row = await _presence.getCurrentPresence();
+      } catch (error) {
+        presenceError =
+            'Could not load availability. The reviewed presence migration may not be applied yet. ${_friendlyError(error)}';
+      }
+
       if (!mounted) return;
 
       setState(() {
@@ -177,9 +186,10 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
             _awayUntil != null &&
             !DateTime.now().isBefore(_awayUntil!);
         _lastRefreshed = DateTime.now();
-        _error = row == null
-            ? 'Your presence record is missing. The reviewed database migration must be applied before availability controls can work.'
-            : null;
+        _error = presenceError ??
+            (row == null
+                ? 'Your presence record is missing. The reviewed database migration must be applied before availability controls can work.'
+                : null);
         _loading = false;
       });
       _syncCountdownTimer();
