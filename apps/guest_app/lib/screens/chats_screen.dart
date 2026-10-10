@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/chat_service.dart';
 import 'chat_conversation_screen.dart';
@@ -14,50 +17,91 @@ class _ChatsScreenState extends State<ChatsScreen> {
   final ChatService _chatService = ChatService();
 
   List<Map<String, dynamic>> _conversations = [];
+  List<RealtimeChannel> _inboxChannels = [];
+  Timer? _refreshDebounce;
   bool _isLoading = true;
+  bool _refreshInProgress = false;
+  bool _refreshAgain = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _loadConversations();
+    _subscribeToInbox();
   }
 
-  Future<void> _loadConversations() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+  void _subscribeToInbox() {
+    try {
+      _inboxChannels = _chatService.subscribeToGuestInbox(
+        onChange: _scheduleInboxRefresh,
+      );
+    } catch (error) {
+      // Initial loading still works if Realtime cannot be started.
+      debugPrint('Unable to subscribe to guest inbox updates: $error');
+    }
+  }
+
+  void _scheduleInboxRefresh() {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        _refreshConversationsInBackground();
+      }
     });
+  }
+
+  Future<void> _refreshConversationsInBackground() async {
+    if (_refreshInProgress) {
+      _refreshAgain = true;
+      return;
+    }
+
+    _refreshInProgress = true;
+    try {
+      do {
+        _refreshAgain = false;
+        await _loadConversations(showLoading: false);
+      } while (_refreshAgain && mounted);
+    } finally {
+      _refreshInProgress = false;
+    }
+  }
+
+  Future<void> _loadConversations({bool showLoading = true}) async {
+    if (!mounted) return;
+
+    if (showLoading) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final conversations = await _chatService.getGuestConversations();
-
       if (!mounted) return;
 
       setState(() {
         _conversations = conversations;
         _isLoading = false;
+        _errorMessage = null;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = error.toString();
         _isLoading = false;
       });
     }
   }
 
   String _formatMessageTime(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) {
-      return '';
-    }
+    if (timestamp == null || timestamp.isEmpty) return '';
 
     final dateTime = DateTime.tryParse(timestamp);
-
-    if (dateTime == null) {
-      return '';
-    }
+    if (dateTime == null) return '';
 
     final local = dateTime.toLocal();
     final now = DateTime.now();
@@ -68,12 +112,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
       final hour = local.hour == 0
           ? 12
           : local.hour > 12
-          ? local.hour - 12
-          : local.hour;
-
+              ? local.hour - 12
+              : local.hour;
       final minute = local.minute.toString().padLeft(2, '0');
       final period = local.hour >= 12 ? 'PM' : 'AM';
-
       return '$hour:$minute $period';
     }
 
@@ -84,20 +126,18 @@ class _ChatsScreenState extends State<ChatsScreen> {
     return '${local.month}/${local.day}/${local.year}';
   }
 
-  Future<void> _openConversation(Map<String, dynamic> conversation) async {
+  Future<void> _openConversation(
+    Map<String, dynamic> conversation,
+  ) async {
     final host = conversation['host'] as Map<String, dynamic>?;
-
-    if (host == null) {
-      return;
-    }
+    if (host == null) return;
 
     final conversationId = conversation['id'] as String;
     final hostId = conversation['host_id'] as String;
-
-    final name = (host['display_name'] as String?)?.trim().isNotEmpty == true
-        ? host['display_name'] as String
+    final displayName = host['display_name'] as String?;
+    final name = displayName?.trim().isNotEmpty == true
+        ? displayName!
         : 'Host';
-
     final imageUrl = host['avatar_url'] as String? ?? '';
 
     await Navigator.push(
@@ -113,8 +153,14 @@ class _ChatsScreenState extends State<ChatsScreen> {
     );
 
     if (!mounted) return;
+    await _loadConversations(showLoading: false);
+  }
 
-    await _loadConversations();
+  @override
+  void dispose() {
+    _refreshDebounce?.cancel();
+    unawaited(_chatService.unsubscribeFromGuestInbox(_inboxChannels));
+    super.dispose();
   }
 
   @override
@@ -122,7 +168,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Chats')),
       body: RefreshIndicator(
-        onRefresh: _loadConversations,
+        onRefresh: () => _loadConversations(),
         child: _buildBody(),
       ),
     );
@@ -166,7 +212,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: _loadConversations,
+                      onPressed: () => _loadConversations(),
                       child: const Text('Try Again'),
                     ),
                   ],
@@ -223,39 +269,31 @@ class _ChatsScreenState extends State<ChatsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: _conversations.length,
       separatorBuilder: (_, _) => const Divider(height: 1, indent: 88),
-      itemBuilder: (context, index) {
-        return _buildConversationTile(_conversations[index]);
-      },
+      itemBuilder: (context, index) =>
+          _buildConversationTile(_conversations[index]),
     );
   }
 
   Widget _buildConversationTile(Map<String, dynamic> conversation) {
     final host = conversation['host'] as Map<String, dynamic>?;
+    if (host == null) return const SizedBox.shrink();
 
-    if (host == null) {
-      return const SizedBox.shrink();
-    }
-
-    final name = (host['display_name'] as String?)?.trim().isNotEmpty == true
-        ? host['display_name'] as String
+    final displayName = host['display_name'] as String?;
+    final name = displayName?.trim().isNotEmpty == true
+        ? displayName!
         : 'Host';
-
     final username = host['username'] as String?;
     final imageUrl = host['avatar_url'] as String? ?? '';
     final isOnline = host['is_online'] == true;
-
     final latestMessage =
         conversation['latest_message'] as Map<String, dynamic>?;
 
+    final latestText = latestMessage?['message'] as String?;
     final messageText =
-        (latestMessage?['message'] as String?)?.trim().isNotEmpty == true
-        ? latestMessage!['message'] as String
-        : 'No messages yet';
-
+        latestText?.trim().isNotEmpty == true ? latestText! : 'No messages yet';
     final messageTime = _formatMessageTime(
       latestMessage?['created_at'] as String?,
     );
-
     final unreadCount = (conversation['unread_count'] as int?) ?? 0;
 
     return ListTile(
@@ -265,9 +303,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundImage: imageUrl.isNotEmpty
-                ? NetworkImage(imageUrl)
-                : null,
+            backgroundImage:
+                imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
             child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
           ),
           if (isOnline)
@@ -295,7 +332,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
             child: Text(
               name,
               style: TextStyle(
-                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
+                fontWeight:
+                    unreadCount > 0 ? FontWeight.bold : FontWeight.w600,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -306,11 +344,10 @@ class _ChatsScreenState extends State<ChatsScreen> {
               style: TextStyle(
                 fontSize: 11,
                 color: unreadCount > 0
-                    ? Theme.of(context).colorScheme.primary
+                    ? const Color(0xFFFF6B6B)
                     : Colors.white54,
-                fontWeight: unreadCount > 0
-                    ? FontWeight.bold
-                    : FontWeight.normal,
+                fontWeight:
+                    unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
               ),
             ),
         ],
@@ -326,27 +363,38 @@ class _ChatsScreenState extends State<ChatsScreen> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: unreadCount > 0 ? Colors.white : Colors.white60,
-                fontWeight: unreadCount > 0
-                    ? FontWeight.w600
-                    : FontWeight.normal,
+                fontWeight:
+                    unreadCount > 0 ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ),
           if (unreadCount > 0) ...[
             const SizedBox(width: 8),
             Container(
-              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              constraints: const BoxConstraints(
+                minWidth: 24,
+                minHeight: 24,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 7,
+                vertical: 3,
+              ),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFFD50000),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  width: 1,
+                ),
               ),
               alignment: Alignment.center,
               child: Text(
                 unreadCount > 99 ? '99+' : '$unreadCount',
                 style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 11,
-                  fontWeight: FontWeight.bold,
+                  height: 1,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),

@@ -24,6 +24,7 @@ class ChatService {
 
     final hostIds = conversations
         .map((conversation) => conversation['host_id'] as String)
+        .toSet()
         .toList();
 
     final hosts = await _supabase
@@ -32,7 +33,6 @@ class ChatService {
         .inFilter('id', hostIds);
 
     final hostMap = {for (final host in hosts) host['id'] as String: host};
-
     final results = <Map<String, dynamic>>[];
 
     for (final conversation in conversations) {
@@ -46,9 +46,8 @@ class ChatService {
           .order('created_at', ascending: false)
           .limit(1);
 
-      final latestMessage = latestMessages.isNotEmpty
-          ? latestMessages.first
-          : null;
+      final latestMessage =
+          latestMessages.isNotEmpty ? latestMessages.first : null;
 
       final unreadMessages = await _supabase
           .from('messages')
@@ -58,7 +57,7 @@ class ChatService {
           .isFilter('read_at', null);
 
       results.add({
-        ...conversation,
+        ...Map<String, dynamic>.from(conversation),
         'host': host,
         'latest_message': latestMessage,
         'unread_count': unreadMessages.length,
@@ -68,8 +67,51 @@ class ChatService {
     return results;
   }
 
-  /// Gets an existing conversation between the current guest
-  /// and a host, or creates one if it doesn't exist.
+  /// Subscribe to changes that can affect the guest inbox.
+  ///
+  /// Conversation changes cover newly created conversations and ordering
+  /// changes. Message changes cover previews and unread counts.
+  List<RealtimeChannel> subscribeToGuestInbox({
+    required void Function() onChange,
+  }) {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      throw StateError('Please sign in again.');
+    }
+
+    final conversationsChannel = _supabase
+        .channel('guest_inbox_conversations_${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'conversations',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'guest_id',
+            value: user.id,
+          ),
+          callback: (_) => onChange(),
+        )
+        .subscribe();
+
+    // The messages table is protected by RLS. Refreshing the inbox after
+    // message changes recalculates previews and unread counts from the
+    // database rather than trying to infer them from partial event payloads.
+    final messagesChannel = _supabase
+        .channel('guest_inbox_messages_${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'messages',
+          callback: (_) => onChange(),
+        )
+        .subscribe();
+
+    return [conversationsChannel, messagesChannel];
+  }
+
+  /// Gets an existing conversation between the current guest and a host,
+  /// or creates one if it doesn't exist.
   Future<Map<String, dynamic>> getOrCreateConversation(String hostId) async {
     final user = _supabase.auth.currentUser;
 
@@ -85,7 +127,7 @@ class ChatService {
         .maybeSingle();
 
     if (existing != null) {
-      return existing;
+      return Map<String, dynamic>.from(existing);
     }
 
     final conversation = await _supabase
@@ -94,7 +136,7 @@ class ChatService {
         .select()
         .single();
 
-    return conversation;
+    return Map<String, dynamic>.from(conversation);
   }
 
   /// Gets all messages in a conversation.
@@ -145,10 +187,10 @@ class ChatService {
 
     await _supabase
         .from('conversations')
-        .update({'updated_at': DateTime.now().toIso8601String()})
+        .update({'updated_at': DateTime.now().toUtc().toIso8601String()})
         .eq('id', conversationId);
 
-    return newMessage;
+    return Map<String, dynamic>.from(newMessage);
   }
 
   /// Listens for new messages in a conversation.
@@ -177,5 +219,14 @@ class ChatService {
   /// Stops listening to a conversation.
   Future<void> unsubscribeFromMessages(RealtimeChannel channel) async {
     await _supabase.removeChannel(channel);
+  }
+
+  /// Stops listening to guest inbox changes.
+  Future<void> unsubscribeFromGuestInbox(
+    List<RealtimeChannel> channels,
+  ) async {
+    for (final channel in channels) {
+      await _supabase.removeChannel(channel);
+    }
   }
 }
