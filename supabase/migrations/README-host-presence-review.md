@@ -20,7 +20,7 @@ Branch: `priority-1/host-presence-foundation`
 
 0. The host login flow no longer connects to LiveKit automatically. Sign-in now routes to the existing placeholder host screen; an explicit call/broadcast action and presence lifecycle still need to be implemented there.
 1. This migration creates the database foundation, but **automatic status changes are not fully wired to the app yet**. The host app and trusted backend still need to call `set_host_automatic_status` when app sessions, direct calls, and broadcasts start/end.
-2. Existing `HostPresenceService.setStatus()` currently uses a direct upsert. After this migration, that direct write will be denied. Update the app to use `request_host_away` for Away and trusted server-side transitions for automatic states before relying on that service.
+2. The guest app's `HostPresenceService` is read-only; its unused status upsert and heartbeat update methods were removed. The repository had no call sites for either method.
 3. Away expiry depends on a recent `host_presence.last_seen_at` heartbeat. The host app must send heartbeats while the session is active. Without a heartbeat, expiry deliberately chooses Offline rather than incorrectly advertising the host as Available.
 4. The migration enables `pg_cron`. The current live-project check reported it is not installed. Check `pg_available_extensions` to confirm it is offered by this project, then verify that the SQL Editor role can enable it and schedule a job. If extension creation or scheduling fails, the transaction should fail; do not remove the scheduler portion and assume expiry is running.
 5. The confirmed policy is a 15-minute default Away duration and a one-hour maximum.
@@ -78,4 +78,4 @@ ORDER BY routine_name, grantee, privilege_type;
 
 ## Rollback guidance
 
-Do not automatically drop `away_until` or the functions after users have started setting Away. A rollback must first disable the cron job, restore the prior client write model or deploy a compatible client, reconcile Away rows, and only then reverse schema/function changes deliberately. Take a Supabase backup or create a recovery checkpoint before applying.
+Do not automatically drop `away_until` or the functions after users have started setting Away. A rollback must first disable the cron job, restore the prior app/client write model or deploy a compatible client, reconcile Away rows, and only then reverse schema/function changes deliberately. Take a Supabase backup or create a recovery checkpoint before applying.
