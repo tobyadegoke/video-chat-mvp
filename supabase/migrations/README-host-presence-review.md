@@ -14,7 +14,7 @@ Branch: `priority-1/host-presence-foundation`
 - Adds `set_host_automatic_status(host_id, status)` for trusted backend transitions only (`offline`, `available`, `busy`, `live`).
 - Adds `expire_away_hosts()` and schedules it once per minute using `pg_cron`. An expired Away becomes Live if `profiles.is_live` is true, Available only if the host heartbeat is no older than two minutes, and Offline otherwise.
 - Revokes all direct client-facing table privileges on `host_presence` from `PUBLIC`, `anon`, and `authenticated` (including DELETE, TRUNCATE, TRIGGER, and REFERENCES), then grants authenticated users SELECT and UPDATE of only `last_seen_at`. It also explicitly revokes existing column-level INSERT/UPDATE grants. The existing RLS policy must continue to restrict heartbeat updates to the caller's own row. Status changes should go through the RPCs.
-- `request_host_away` only allows Away to be started or renewed from Available/Away; Offline, Busy, and Live are rejected. A host can renew Away immediately while already Away.
+- `request_host_away` only allows Away to be started or renewed from Available/Away; Offline, Busy, and Live are rejected. A host can renew Away immediately while already Away. The function's row-lock order was aligned with the automatic transition/expiry path to reduce deadlock risk.
 
 ## Important limitations before applying
 
