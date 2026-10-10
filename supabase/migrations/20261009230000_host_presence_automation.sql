@@ -294,15 +294,21 @@ $function$;
 -- Preserve read access, but prevent authenticated clients from inserting
 -- arbitrary presence rows or setting automatic statuses directly. Heartbeats
 -- remain possible on the caller's own row through last_seen_at only.
-REVOKE INSERT, UPDATE ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
--- Also revoke any column-level grants that a prior policy/permission setup may
--- have left behind; table-level REVOKE alone does not remove those grants.
+-- Remove all direct client-facing table privileges, including DELETE,
+-- TRUNCATE, TRIGGER, and REFERENCES. RLS is not a substitute for revoking
+-- dangerous table-level privileges such as TRUNCATE.
+REVOKE ALL PRIVILEGES ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
+-- Also revoke any column-level grants that a prior setup may have left behind;
+-- table-level REVOKE alone does not remove column-specific grants.
 REVOKE INSERT (
   id, host_id, status, away_until, last_seen_at, updated_at, created_at
 ) ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
 REVOKE UPDATE (
   id, host_id, status, away_until, updated_at, created_at
 ) ON TABLE public.host_presence FROM PUBLIC, anon, authenticated;
+
+-- Authenticated users can read presence. The existing row-level UPDATE policy
+-- limits the heartbeat update to the host's own row.
 GRANT SELECT ON TABLE public.host_presence TO authenticated;
 GRANT UPDATE (last_seen_at) ON TABLE public.host_presence TO authenticated;
 
