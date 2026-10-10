@@ -36,7 +36,11 @@ void main() {
     );
     await tester.pump();
 
-    await tester.ensureVisible(find.text('Renew Away'));
+    await tester.scrollUntilVisible(
+      find.text('Renew Away'),
+      300,
+      scrollable: find.byType(ListView),
+    );
     await tester.tap(find.text('Renew Away'));
     await tester.pump();
 
