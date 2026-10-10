@@ -1,4 +1,3 @@
-import 'package:calling/calling.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,8 +13,6 @@ class HostAuthScreen extends StatefulWidget {
 
 class _HostAuthScreenState extends State<HostAuthScreen> {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final CallingService _callingService = CallingService();
-
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _displayNameController = TextEditingController();
@@ -69,54 +66,6 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
 
         _showMessage('Signed in successfully.');
 
-        try {
-          final result = await _supabase.functions.invoke(
-            'livekit-token',
-            body: <String, dynamic>{},
-          );
-
-          final data = result.data;
-
-          if (result.status != 200 || data is! Map) {
-            _showMessage('Unable to obtain a video connection token.');
-            return;
-          }
-
-          final serverUrl = data['server_url'];
-          final roomName = data['room_name'];
-          final participantToken = data['participant_token'];
-
-          if (serverUrl is! String ||
-              roomName is! String ||
-              participantToken is! String ||
-              serverUrl.isEmpty ||
-              roomName.isEmpty ||
-              participantToken.isEmpty) {
-            _showMessage('The video service returned an invalid response.');
-            return;
-          }
-
-          await _callingService.connect(
-            liveKitUrl: serverUrl,
-            token: participantToken,
-          );
-
-          debugPrint(
-            'LiveKit room connected: '
-            '${_callingService.isConnected}',
-          );
-
-          if (!mounted) return;
-
-          _showMessage('Connected to video room successfully.');
-        } catch (error) {
-          // Never log the participant token or the full response.
-          debugPrint('LiveKit connection failed: ${error.runtimeType}');
-
-          if (!mounted) return;
-
-          _showMessage('Unable to connect to the video room.');
-        }
       } else {
         final response = await _supabase.auth.signUp(
           email: email,
