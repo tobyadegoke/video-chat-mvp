@@ -4,13 +4,14 @@
 -- is closed.
 --
 -- Status rules:
---   - Hosts may explicitly request Away for 1..60 minutes (default 15).
---   - Available / Busy / Live / Offline are trusted backend transitions.
---   - An expired Away becomes Live if profiles.is_live is true; otherwise it
---     becomes Available only when the host heartbeat is recent (<= 2 minutes),
---     and Offline otherwise.
---   - This migration does not invent call/broadcast tables. Trusted backend
---     code must call set_host_automatic_status() when those activities change.
+--   - Hosts may explicitly request Available while Offline/Away, or Away for
+--     1..60 minutes (default 15).
+--   - Busy and Live are trusted backend transitions; this migration does not
+--     invent call/broadcast tables. Backend event handlers must call
+--     set_host_automatic_status() when those activities change.
+--   - Hosts left Available without a heartbeat for two minutes become Offline.
+--     Expired Away becomes Live if profiles.is_live is true, Available only
+--     when the host heartbeat is recent, and Offline otherwise.
 
 BEGIN;
 
@@ -194,6 +195,92 @@ BEGIN
 END;
 $function$;
 
+-- Host-controlled request: explicitly become Available. The caller can only
+-- change their own host row, and cannot override an active Busy/Live state.
+CREATE OR REPLACE FUNCTION public.request_host_available()
+RETURNS public.host_presence
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_user_id uuid := auth.uid();
+  v_role text;
+  v_is_live boolean;
+  v_current_status text;
+  v_presence public.host_presence;
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '28000';
+  END IF;
+
+  SELECT p.role
+    INTO v_role
+  FROM public.profiles p
+  WHERE p.id = v_user_id;
+
+  IF v_role IS DISTINCT FROM 'host' THEN
+    RAISE EXCEPTION 'Only host accounts can become Available.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- Keep the same lock order as Away requests and automatic transitions.
+  SELECT hp.status
+    INTO v_current_status
+  FROM public.host_presence hp
+  WHERE hp.host_id = v_user_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Host presence row not found.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  SELECT p.is_live, p.role
+    INTO v_is_live, v_role
+  FROM public.profiles p
+  WHERE p.id = v_user_id
+  FOR UPDATE;
+
+  IF v_role IS DISTINCT FROM 'host' THEN
+    RAISE EXCEPTION 'Only host accounts can become Available.'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF COALESCE(v_is_live, false) OR v_current_status = 'live' THEN
+    RAISE EXCEPTION 'Stop the live broadcast before becoming Available.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF v_current_status = 'busy' THEN
+    RAISE EXCEPTION 'Finish the active call before becoming Available.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  IF v_current_status NOT IN ('offline', 'away', 'available') THEN
+    RAISE EXCEPTION 'This host cannot become Available from the current status.'
+      USING ERRCODE = '55000';
+  END IF;
+
+  UPDATE public.host_presence
+  SET status = 'available',
+      away_until = NULL,
+      last_seen_at = now(),
+      updated_at = now()
+  WHERE host_id = v_user_id
+  RETURNING * INTO v_presence;
+
+  UPDATE public.profiles
+  SET is_online = true,
+      is_live = false,
+      last_seen_at = now(),
+      updated_at = now()
+  WHERE id = v_user_id;
+
+  RETURN v_presence;
+END;
+$function$;
+
 -- Trusted automatic transition. A trusted backend must call this after
 -- connection, call, broadcast, and disconnect events.
 CREATE OR REPLACE FUNCTION public.set_host_automatic_status(
@@ -249,8 +336,8 @@ BEGIN
 END;
 $function$;
 
--- Called by the scheduled job. A recent host_presence heartbeat is required
--- before an expired Away can become Available. Otherwise the host goes Offline.
+-- Called by the scheduled job. Stale Available hosts become Offline;
+-- expired Away becomes Available only with a recent heartbeat.
 CREATE OR REPLACE FUNCTION public.expire_away_hosts()
 RETURNS integer
 LANGUAGE plpgsql
@@ -269,15 +356,20 @@ BEGIN
   WITH expired AS (
     SELECT hp.host_id
     FROM public.host_presence hp
-    WHERE hp.status = 'away'
-      AND hp.away_until <= now()
+    WHERE (hp.status = 'away' AND hp.away_until <= now())
+       OR (
+         hp.status = 'available'
+         AND hp.last_seen_at <= now() - interval '2 minutes'
+       )
     FOR UPDATE SKIP LOCKED
   ),
   changed AS (
     UPDATE public.host_presence hp
     SET status = CASE
           WHEN p.is_live THEN 'live'
-          WHEN hp.last_seen_at >= now() - interval '2 minutes' THEN 'available'
+          WHEN hp.status = 'away'
+               AND hp.last_seen_at >= now() - interval '2 minutes'
+            THEN 'available'
           ELSE 'offline'
         END,
         away_until = NULL,
@@ -322,6 +414,9 @@ GRANT UPDATE (last_seen_at) ON TABLE public.host_presence TO authenticated;
 
 REVOKE ALL ON FUNCTION public.request_host_away(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.request_host_away(integer) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.request_host_available() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.request_host_available() TO authenticated;
 
 REVOKE ALL ON FUNCTION public.set_host_automatic_status(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.set_host_automatic_status(uuid, text) TO service_role;
