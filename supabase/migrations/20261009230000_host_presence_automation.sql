@@ -103,8 +103,9 @@ BEFORE UPDATE ON public.host_presence
 FOR EACH ROW
 EXECUTE FUNCTION public.touch_host_presence_updated_at();
 
--- Host-controlled operation: Away is the only status a host can request.
--- Duration is bounded to avoid indefinite or accidentally very long Away.
+-- Host-controlled operation: Away requests are duration-bounded to prevent
+-- hosts from remaining unavailable indefinitely. Available is requested through
+-- a separate function that enforces the same host and status checks.
 CREATE OR REPLACE FUNCTION public.request_host_away(
   p_duration_minutes integer DEFAULT 15
 )
@@ -415,7 +416,7 @@ GRANT UPDATE (last_seen_at) ON TABLE public.host_presence TO authenticated;
 REVOKE ALL ON FUNCTION public.request_host_away(integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.request_host_away(integer) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.request_host_available() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.request_host_available() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.request_host_available() TO authenticated;
 
 REVOKE ALL ON FUNCTION public.set_host_automatic_status(uuid, text) FROM PUBLIC, anon, authenticated;
