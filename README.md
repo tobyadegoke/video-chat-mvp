@@ -1,12 +1,42 @@
-# Video Chat MVP implementation patch
+# Video Chat MVP
 
-## Contents
+This repository contains two Flutter applications and shared Dart packages. The repository root is not a Flutter app.
+
+- Host app: `apps/host_app`
+- Guest app: `apps/guest_app`
+- Shared packages: `packages/`
+
+## Run an app (Windows PowerShell)
+
+From the repository root, run the host app:
+
+```powershell
+Set-Location apps/host_app
+flutter pub get
+flutter run
+```
+
+Or run the guest app:
+
+```powershell
+Set-Location apps/guest_app
+flutter pub get
+flutter run
+```
+
+Each app has its own Flutter entrypoint and platform configuration. Run Flutter commands from that app's directory.
+
+## Implementation patch
+
+### Contents
+
 - `database/20261009_host_referral_and_usernames.sql`: schema migration for generated usernames, server-side host referral validation, permanent attribution, profile identity protection, and narrowed client table permissions.
 - `apps/guest_app/lib/services/profile_service.dart`: profile updates no longer send a username.
 - `apps/guest_app/lib/screens/edit_profile_screen.dart`: username is displayed as read-only; display name and bio remain editable.
 - `apps/host_app/lib/screens/host_auth_screen.dart`: host login/signup UI; signup sends account type and referral code, but never assigns a role client-side.
 
-## Apply in this order
+### Apply in this order
+
 1. Back up the Supabase project or create a migration checkpoint.
 2. Review and run the SQL in the Supabase SQL Editor as a trusted database administrator.
 3. Copy the two Dart files over the matching files in your local repository.
