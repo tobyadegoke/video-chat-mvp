@@ -129,8 +129,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
     _heartbeatTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) {
-        _sendHeartbeat();
-        _refreshPresence();
+        unawaited(_sendHeartbeat());
+        unawaited(_refreshPresence());
       },
     );
   }
@@ -165,8 +165,8 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
     _appActive = state == AppLifecycleState.resumed;
     if (_appActive && _isHost) {
       _startHeartbeat();
-      _sendHeartbeat();
-      _refreshPresence();
+      unawaited(_sendHeartbeat());
+      unawaited(_refreshPresence());
     } else {
       _heartbeatTimer?.cancel();
       _heartbeatTimer = null;
