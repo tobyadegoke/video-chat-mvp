@@ -12,6 +12,8 @@ import 'services/host_chat_service.dart';
 
 import 'supabase_config.dart';
 
+import 'screens/host_profile_screen.dart';
+
 const _pageBackground = Color(0xFF090B10);
 
 const _surface = Color(0xFF141821);
@@ -1020,6 +1022,9 @@ class _HostSignedInScreenState extends State<HostSignedInScreen>
 
   Widget _buildDestinationPage(int index) {
     if (index == 2) return const HostChatsScreen();
+    if (index == 1) return const HostProfileScreen();
+
+    // Keep the existing placeholder logic for other destinations.
 
     const titles = [
       'Home',
