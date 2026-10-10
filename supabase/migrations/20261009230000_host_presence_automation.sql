@@ -4,7 +4,7 @@
 -- is closed.
 --
 -- Status rules:
---   - Hosts may explicitly request Away for 1..240 minutes (default 30).
+--   - Hosts may explicitly request Away for 1..60 minutes (default 15).
 --   - Available / Busy / Live / Offline are trusted backend transitions.
 --   - An expired Away becomes Live if profiles.is_live is true; otherwise it
 --     becomes Available only when the host heartbeat is recent (<= 2 minutes),
@@ -105,7 +105,7 @@ EXECUTE FUNCTION public.touch_host_presence_updated_at();
 -- Host-controlled operation: Away is the only status a host can request.
 -- Duration is bounded to avoid indefinite or accidentally very long Away.
 CREATE OR REPLACE FUNCTION public.request_host_away(
-  p_duration_minutes integer DEFAULT 30
+  p_duration_minutes integer DEFAULT 15
 )
 RETURNS public.host_presence
 LANGUAGE plpgsql
@@ -123,8 +123,8 @@ BEGIN
     RAISE EXCEPTION 'Authentication required.' USING ERRCODE = '28000';
   END IF;
 
-  IF p_duration_minutes IS NULL OR p_duration_minutes < 1 OR p_duration_minutes > 240 THEN
-    RAISE EXCEPTION 'Away duration must be between 1 and 240 minutes.'
+  IF p_duration_minutes IS NULL OR p_duration_minutes < 1 OR p_duration_minutes > 60 THEN
+    RAISE EXCEPTION 'Away duration must be between 1 and 60 minutes.'
       USING ERRCODE = '22023';
   END IF;
 
