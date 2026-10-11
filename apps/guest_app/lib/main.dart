@@ -1,25 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'screens/auth_screen.dart';
 import 'screens/chats_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/live_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/shuffle_screen.dart';
-
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'supabase_config.dart';
-
-import 'screens/auth_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
-
   runApp(const GuestApp());
 }
 
@@ -29,20 +24,12 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = Supabase.instance.client.auth;
-
     return StreamBuilder<AuthState>(
       stream: auth.onAuthStateChange,
-      initialData: AuthState(
-        AuthChangeEvent.initialSession,
-        auth.currentSession,
-      ),
+      initialData: AuthState(AuthChangeEvent.initialSession, auth.currentSession),
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? auth.currentSession;
-
-        if (session == null) {
-          return const AuthScreen();
-        }
-
+        if (session == null) return const AuthScreen();
         return const GuestNavigation();
       },
     );
@@ -54,18 +41,13 @@ class GuestApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const seed = Color(0xFF7561E8);
     return MaterialApp(
       title: 'Video Platform',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0F0F0F),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFE53935),
-          brightness: Brightness.dark,
-        ),
-      ),
+      themeMode: ThemeMode.system,
+      theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light)),
+      darkTheme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark)),
       home: const AuthGate(),
     );
   }
@@ -80,7 +62,6 @@ class GuestNavigation extends StatefulWidget {
 
 class _GuestNavigationState extends State<GuestNavigation> {
   int _selectedIndex = 0;
-
   late final List<Widget> _screens;
 
   @override
@@ -95,11 +76,7 @@ class _GuestNavigationState extends State<GuestNavigation> {
     ];
   }
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  void _onItemTapped(int index) => setState(() => _selectedIndex = index);
 
   @override
   Widget build(BuildContext context) {
@@ -109,27 +86,11 @@ class _GuestNavigationState extends State<GuestNavigation> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
           NavigationDestination(icon: Icon(Icons.shuffle), label: 'Shuffle'),
-          NavigationDestination(
-            icon: Icon(Icons.live_tv_outlined),
-            selectedIcon: Icon(Icons.live_tv),
-            label: 'Live',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline),
-            selectedIcon: Icon(Icons.chat_bubble),
-            label: 'Chats',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+          NavigationDestination(icon: Icon(Icons.live_tv_outlined), selectedIcon: Icon(Icons.live_tv), label: 'Live'),
+          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Chats'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );

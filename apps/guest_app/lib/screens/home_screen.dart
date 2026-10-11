@@ -1,9 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/host.dart';
 import '../services/chat_service.dart';
 import '../services/host_service.dart';
 import 'chat_conversation_screen.dart';
+
+const _appName = 'Video Platform'; // Replace when the final app name is decided.
+const _continents = <String>[
+  'All Continents',
+  'Africa',
+  'Asia',
+  'Europe',
+  'North America',
+  'South America',
+];
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onSeeAllLive});
@@ -16,516 +28,86 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final HostService _hostService = HostService();
-
+  Timer? _refreshTimer;
   List<Host> _hosts = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   String? _errorMessage;
+  String _continent = 'All Continents';
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadHosts();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) unawaited(_loadHosts(silent: true));
+    });
   }
 
-  Future<void> _loadHosts() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
+  Future<void> _loadHosts({bool silent = false}) async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    if (!silent && mounted) {
+      setState(() {
+        _isLoading = _hosts.isEmpty;
+        _errorMessage = null;
+      });
+    }
     try {
       final hosts = await _hostService.getAllHosts();
-
+      hosts.sort((a, b) {
+        if (a.isOnline != b.isOnline) return a.isOnline ? -1 : 1;
+        if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
+        return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+      });
       if (!mounted) return;
-
       setState(() {
         _hosts = hosts;
         _isLoading = false;
+        _errorMessage = null;
       });
     } catch (_) {
       if (!mounted) return;
-
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Unable to load hosts.';
+        _errorMessage = 'Unable to load hosts. Please try again.';
       });
+    } finally {
+      _isRefreshing = false;
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_errorMessage != null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(_errorMessage!),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _loadHosts,
-                child: const Text('Try Again'),
-              ),
-            ],
-          ),
-        ),
+  List<Host> get _filteredHosts {
+    return _hosts.where((host) {
+      final continentMatches = _continent == 'All Continents' ||
+          host.continent == _continent;
+      final queryMatches = host.displayName.toLowerCase().contains(
+        _searchQuery.trim().toLowerCase(),
       );
-    }
+      return continentMatches && queryMatches;
+    }).toList();
+  }
 
-    final liveHosts = _hosts.where((host) => host.isLive).toList();
+  Future<void> _openSearch() async {
+    final query = await showSearch<String?>(
+      context: context,
+      delegate: _HostSearchDelegate(),
+    );
+    if (!mounted || query == null) return;
+    setState(() => _searchQuery = query);
+  }
 
-    final recommendedHosts = _hosts.where((host) => !host.isLive).toList();
-
-    final featuredHost = liveHosts.isNotEmpty ? liveHosts.first : null;
-
-    final starOfWeek = _hosts.isNotEmpty ? _hosts.first : null;
-
-    return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadHosts,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-            children: [
-              // HEADER
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Good evening,',
-                        style: TextStyle(fontSize: 16, color: Colors.white60),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Tobi 👋',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.notifications_none),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 28),
-
-              // FEATURED HOST
-              const Text(
-                'Featured Host',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              if (featuredHost != null)
-                _FeaturedHostCard(host: featuredHost)
-              else
-                const _EmptySection(
-                  message: 'No hosts are live right now',
-                  height: 180,
-                ),
-
-              const SizedBox(height: 32),
-
-              // STAR OF THE WEEK
-              const Text(
-                '⭐ Star of the Week',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              if (starOfWeek != null)
-                _StarOfWeekCard(host: starOfWeek)
-              else
-                const _EmptySection(
-                  message: 'No hosts available yet',
-                  height: 120,
-                ),
-
-              const SizedBox(height: 32),
-
-              // LIVE NOW
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '🔴 Live Now',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  TextButton(
-                    onPressed: widget.onSeeAllLive,
-                    child: const Text('See all'),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              if (liveHosts.isEmpty)
-                const _EmptySection(
-                  message: 'No hosts are live right now',
-                  height: 190,
-                )
-              else
-                SizedBox(
-                  height: 190,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: liveHosts.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      return _LiveHostCard(host: liveHosts[index]);
-                    },
-                  ),
-                ),
-
-              const SizedBox(height: 32),
-
-              // RECOMMENDED
-              const Text(
-                'Recommended for You',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              if (recommendedHosts.isEmpty)
-                const _EmptySection(
-                  message: 'No more hosts to recommend yet',
-                  height: 210,
-                )
-              else
-                SizedBox(
-                  height: 210,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: recommendedHosts.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      return _RecommendedHostCard(
-                        host: recommendedHosts[index],
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+  void _showNotifications() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Notifications are coming soon.')),
     );
   }
-}
 
-class _EmptySection extends StatelessWidget {
-  final String message;
-  final double height;
-
-  const _EmptySection({required this.message, required this.height});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: height,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1C),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Center(
-        child: Text(message, style: const TextStyle(color: Colors.white54)),
-      ),
-    );
-  }
-}
-
-class _FeaturedHostCard extends StatelessWidget {
-  final Host host;
-
-  const _FeaturedHostCard({required this.host});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 260,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: const Color(0xFF1C1C1C),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (host.avatarUrl != null && host.avatarUrl!.isNotEmpty)
-              Image.network(
-                host.avatarUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) {
-                  return const Center(
-                    child: Icon(Icons.person, size: 80, color: Colors.white38),
-                  );
-                },
-              )
-            else
-              const Center(
-                child: Icon(Icons.person, size: 80, color: Colors.white38),
-              ),
-
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.85),
-                  ],
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          host.displayName,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      if (host.isLive)
-                        const Icon(
-                          Icons.circle,
-                          color: Colors.redAccent,
-                          size: 12,
-                        ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    host.bio ?? 'Live on the platform',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Joining ${host.displayName}...'),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.videocam),
-                      label: const Text('Join Live'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StarOfWeekCard extends StatelessWidget {
-  final Host host;
-
-  const _StarOfWeekCard({required this.host});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 120,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: const Color(0xFF1C1C1C),
-      ),
-      child: Row(
-        children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 40,
-                backgroundColor: const Color(0xFF2A2A2A),
-                backgroundImage:
-                    host.avatarUrl != null && host.avatarUrl!.isNotEmpty
-                    ? NetworkImage(host.avatarUrl!)
-                    : null,
-                child: host.avatarUrl == null || host.avatarUrl!.isEmpty
-                    ? const Icon(Icons.person, size: 40)
-                    : null,
-              ),
-              const Positioned(
-                right: 0,
-                bottom: 0,
-                child: CircleAvatar(
-                  radius: 14,
-                  backgroundColor: Colors.amber,
-                  child: Icon(Icons.star, size: 16, color: Colors.black),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(width: 16),
-
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  host.displayName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Most loved host this week',
-                  style: TextStyle(color: Colors.white60),
-                ),
-              ],
-            ),
-          ),
-
-          const Icon(Icons.emoji_events, color: Colors.amber, size: 32),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiveHostCard extends StatelessWidget {
-  final Host host;
-
-  const _LiveHostCard({required this.host});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 140,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (host.avatarUrl != null && host.avatarUrl!.isNotEmpty)
-                    Image.network(
-                      host.avatarUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) {
-                        return const Center(
-                          child: Icon(
-                            Icons.person,
-                            size: 60,
-                            color: Colors.white38,
-                          ),
-                        );
-                      },
-                    )
-                  else
-                    const Center(
-                      child: Icon(
-                        Icons.person,
-                        size: 60,
-                        color: Colors.white38,
-                      ),
-                    ),
-
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'LIVE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            host.displayName,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-            overflow: TextOverflow.ellipsis,
-          ),
-
-          Text(
-            host.username != null && host.username!.isNotEmpty
-                ? '@${host.username}'
-                : 'Live now',
-            style: const TextStyle(fontSize: 12, color: Colors.white60),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RecommendedHostCard extends StatelessWidget {
-  final Host host;
-
-  const _RecommendedHostCard({required this.host});
-
-  Future<void> _openChat(BuildContext context) async {
+  Future<void> _openChat(Host host) async {
     try {
       final conversation = await ChatService().getOrCreateConversation(host.id);
-
-      if (!context.mounted) return;
-
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -537,76 +119,352 @@ class _RecommendedHostCard extends StatelessWidget {
           ),
         ),
       );
-    } catch (e) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not start chat: $e')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start chat: $error')),
+      );
     }
+  }
+
+  void _startCall(Host host) {
+    // Call navigation is intentionally not wired until the call flow is ready.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Calling ${host.displayName} will be available with the call feature.')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 145,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: host.avatarUrl != null && host.avatarUrl!.isNotEmpty
-                  ? Image.network(
-                      host.avatarUrl!,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) {
-                        return const Center(
-                          child: Icon(
-                            Icons.person,
-                            size: 60,
-                            color: Colors.white38,
-                          ),
-                        );
-                      },
-                    )
-                  : const Center(
-                      child: Icon(
-                        Icons.person,
-                        size: 60,
-                        color: Colors.white38,
+    final theme = Theme.of(context);
+    final hosts = _filteredHosts;
+    final onlineCount = hosts.where((host) => host.isOnline).length;
+
+    return Scaffold(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadHosts,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _appName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.6,
                       ),
                     ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            host.displayName,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-            overflow: TextOverflow.ellipsis,
-          ),
-          Text(
-            host.username != null && host.username!.isNotEmpty
-                ? '@${host.username}'
-                : 'Host',
-            style: const TextStyle(fontSize: 12, color: Colors.white60),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            width: double.infinity,
-            height: 34,
-            child: OutlinedButton.icon(
-              onPressed: () => _openChat(context),
-              icon: const Icon(Icons.chat_bubble_outline, size: 15),
-              label: const Text('Chat', style: TextStyle(fontSize: 12)),
-              style: OutlinedButton.styleFrom(
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
+                  ),
+                  IconButton(
+                    tooltip: 'Search hosts',
+                    onPressed: _openSearch,
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'Notifications',
+                    onPressed: _showNotifications,
+                    icon: const Icon(Icons.notifications_none_rounded),
+                  ),
+                ],
               ),
-            ),
+              const SizedBox(height: 26),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Discover hosts',
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      '$onlineCount online',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _continents.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final continent = _continents[index];
+                    final selected = _continent == continent;
+                    return ChoiceChip(
+                      avatar: continent == 'All Continents'
+                          ? const Icon(Icons.public_rounded, size: 17)
+                          : null,
+                      label: Text(continent),
+                      selected: selected,
+                      onSelected: (_) => setState(() => _continent = continent),
+                      showCheckmark: false,
+                    );
+                  },
+                ),
+              ),
+              if (_searchQuery.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    label: Text('Search: $_searchQuery'),
+                    onDeleted: () => setState(() => _searchQuery = ''),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 80),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_errorMessage != null && _hosts.isEmpty)
+                _MessagePanel(
+                  icon: Icons.cloud_off_rounded,
+                  message: _errorMessage!,
+                  action: TextButton(onPressed: _loadHosts, child: const Text('Try again')),
+                )
+              else if (hosts.isEmpty)
+                _MessagePanel(
+                  icon: Icons.people_outline_rounded,
+                  message: _continent == 'All Continents'
+                      ? 'No hosts found yet.'
+                      : 'No hosts found in $_continent.',
+                  action: TextButton(onPressed: () => setState(() => _continent = 'All Continents'), child: const Text('Clear filter')),
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 760
+                        ? 3
+                        : constraints.maxWidth >= 480
+                            ? 2
+                            : 2;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: hosts.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        mainAxisExtent: 218,
+                      ),
+                      itemBuilder: (context, index) {
+                        final host = hosts[index];
+                        return _HostCard(
+                          host: host,
+                          onMessage: () => _openChat(host),
+                          onCall: () => _startCall(host),
+                        );
+                      },
+                    );
+                  },
+                ),
+              if (_errorMessage != null && _hosts.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_errorMessage!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HostCard extends StatelessWidget {
+  const _HostCard({required this.host, required this.onMessage, required this.onCall});
+
+  final Host host;
+  final VoidCallback onMessage;
+  final VoidCallback onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final avatar = host.avatarUrl;
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: .45)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 34,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  backgroundImage: avatar != null && avatar.trim().isNotEmpty
+                      ? NetworkImage(avatar)
+                      : null,
+                  child: avatar == null || avatar.trim().isEmpty
+                      ? const Icon(Icons.person_rounded, size: 34)
+                      : null,
+                ),
+                if (host.isOnline)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: theme.colorScheme.surface, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            Text(
+              host.displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.circle, size: 7, color: host.isOnline ? Colors.green : theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    host.isOnline ? 'Online' : 'Offline',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+            if (host.continent != null && host.continent!.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                host.continent!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onMessage,
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                    label: const Text('Message'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onCall,
+                    icon: const Icon(Icons.call_outlined, size: 16),
+                    label: const Text('Call'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MessagePanel extends StatelessWidget {
+  const _MessagePanel({required this.icon, required this.message, this.action});
+  final IconData icon;
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 52),
+      child: Column(
+        children: [
+          Icon(icon, size: 46, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center, style: theme.textTheme.bodyLarge),
+          ?action,
         ],
       ),
     );
   }
+}
+
+class _HostSearchDelegate extends SearchDelegate<String?> {
+  @override
+  String get searchFieldLabel => 'Search hosts by display name';
+
+  @override
+  List<Widget>? buildActions(BuildContext context) => [
+    IconButton(onPressed: () => query = '', icon: const Icon(Icons.clear_rounded)),
+  ];
+
+  @override
+  Widget? buildLeading(BuildContext context) => IconButton(
+    onPressed: () => close(context, null),
+    icon: const Icon(Icons.arrow_back_rounded),
+  );
+
+  @override
+  Widget buildResults(BuildContext context) => Center(
+    child: FilledButton(onPressed: () => close(context, query.trim()), child: const Text('Apply search')),
+  );
+
+  @override
+  Widget buildSuggestions(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(24),
+    child: Text('Enter a host display name, then select Search.'),
+  );
 }

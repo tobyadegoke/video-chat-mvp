@@ -5,7 +5,10 @@ class Host {
   final String? bio;
   final String? avatarUrl;
   final bool isLive;
+  final bool isOnline;
+  final DateTime? lastSeenAt;
   final String? liveRoomId;
+  final String? continent;
 
   const Host({
     required this.id,
@@ -14,7 +17,10 @@ class Host {
     this.bio,
     this.avatarUrl,
     required this.isLive,
+    this.isOnline = false,
+    this.lastSeenAt,
     this.liveRoomId,
+    this.continent,
   });
 
   factory Host.fromMap(Map<String, dynamic> map) {
@@ -25,7 +31,12 @@ class Host {
       bio: map['bio'] as String?,
       avatarUrl: map['avatar_url'] as String?,
       isLive: map['is_live'] as bool? ?? false,
+      isOnline: map['is_online'] as bool? ?? false,
+      lastSeenAt: map['last_seen_at'] is String
+          ? DateTime.tryParse(map['last_seen_at'] as String)?.toLocal()
+          : null,
       liveRoomId: map['live_room_id'] as String?,
+      continent: map['continent'] as String?,
     );
   }
 }
