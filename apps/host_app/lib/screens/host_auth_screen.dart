@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Host login and referral-based signup.
-/// The database validates the referral code and assigns the host role.
-/// Never send a client-selected role value.
 class HostAuthScreen extends StatefulWidget {
   const HostAuthScreen({super.key});
 
@@ -12,43 +9,85 @@ class HostAuthScreen extends StatefulWidget {
 }
 
 class _HostAuthScreenState extends State<HostAuthScreen> {
-  final SupabaseClient _supabase = Supabase.instance.client;
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _displayNameController = TextEditingController();
-  final TextEditingController _referralCodeController = TextEditingController();
+  final _supabase = Supabase.instance.client;
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _displayName = TextEditingController();
+  final _referralCode = TextEditingController();
 
   bool _isLogin = true;
-  bool _isLoading = false;
+  bool _loading = false;
   bool _obscurePassword = true;
+  DateTime? _dateOfBirth;
+
+  Future<void> _chooseDateOfBirth() async {
+    final today = DateTime.now();
+    final latestAllowed = DateTime(today.year - 18, today.month, today.day);
+
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? latestAllowed,
+      firstDate: DateTime(1900),
+      lastDate: today,
+      helpText: 'Select your date of birth',
+    );
+
+    if (selected != null && mounted) {
+      setState(() => _dateOfBirth = selected);
+    }
+  }
+
+  String _isoDate(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  bool _isAtLeast18(DateTime dob) {
+    final today = DateTime.now();
+    final cutoff = DateTime(today.year - 18, today.month, today.day);
+    return !dob.isAfter(cutoff);
+  }
 
   Future<void> _submit() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    final displayName = _displayNameController.text.trim();
-    final referralCode = _referralCodeController.text.trim().toUpperCase();
+    final email = _email.text.trim();
+    final password = _password.text;
+    final displayName = _displayName.text.trim();
+    final referralCode = _referralCode.text.trim().toUpperCase();
 
     if (email.isEmpty || password.isEmpty) {
-      _showMessage('Please enter your email and password.');
+      _showMessage('Enter your email and password.');
       return;
     }
 
-    if (!_isLogin && displayName.isEmpty) {
-      _showMessage('Please enter your display name.');
-      return;
-    }
-
-    if (!_isLogin && referralCode.isEmpty) {
-      _showMessage('A host referral code is required.');
-      return;
-    }
-
-    if (!_isLogin && password.length < 6) {
+    if (password.length < 6) {
       _showMessage('Password must contain at least 6 characters.');
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (!_isLogin) {
+      if (displayName.isEmpty) {
+        _showMessage('Enter your display name.');
+        return;
+      }
+
+      if (referralCode.isEmpty) {
+        _showMessage('A host referral code is required.');
+        return;
+      }
+
+      final dob = _dateOfBirth;
+      if (dob == null) {
+        _showMessage('Select your date of birth.');
+        return;
+      }
+
+      if (!_isAtLeast18(dob)) {
+        _showMessage('You must be at least 18 to register as a host.');
+        return;
+      }
+    }
+
+    setState(() => _loading = true);
 
     try {
       if (_isLogin) {
@@ -57,16 +96,12 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
           password: password,
         );
 
-        if (response.session == null) {
-          _showMessage('Login succeeded, but no session was returned.');
-          return;
+        if (response.session == null && mounted) {
+          _showMessage('No active session was returned.');
         }
-
-        if (!mounted) return;
-
-        _showMessage('Signed in successfully.');
-
       } else {
+        final dob = _dateOfBirth!;
+
         final response = await _supabase.auth.signUp(
           email: email,
           password: password,
@@ -74,6 +109,7 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
             'display_name': displayName,
             'account_type': 'host',
             'referral_code': referralCode,
+            'date_of_birth': _isoDate(dob),
           },
         );
 
@@ -81,39 +117,32 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
 
         _showMessage(
           response.session == null
-              ? 'Account request accepted. Check your email to verify your account.'
-              : 'Host account created successfully.',
+              ? 'Check your email to confirm your account. Then sign in to continue onboarding.'
+              : 'Account created. Continue with location onboarding.',
         );
       }
-
-      // The app-level auth/session listener should route
-      // signed-in users onward.
     } on AuthException catch (error) {
       _showMessage(error.message);
     } catch (error) {
       debugPrint('Host authentication failed: ${error.runtimeType}');
-
       _showMessage('Something went wrong. Please try again.');
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   void _showMessage(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _displayNameController.dispose();
-    _referralCodeController.dispose();
+    _email.dispose();
+    _password.dispose();
+    _displayName.dispose();
+    _referralCode.dispose();
     super.dispose();
   }
 
@@ -131,7 +160,7 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
                 children: [
                   const Icon(
                     Icons.video_camera_front_rounded,
-                    size: 72,
+                    size: 68,
                     color: Colors.redAccent,
                   ),
                   const SizedBox(height: 24),
@@ -144,64 +173,66 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _isLogin
-                        ? 'Sign in to manage your host account.'
-                        : 'Create a host account using your referral code.',
+                        ? 'Sign in to continue to your host account.'
+                        : 'Create your account using an agent referral code.',
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                   if (!_isLogin) ...[
                     TextField(
-                      controller: _displayNameController,
+                      controller: _displayName,
                       textCapitalization: TextCapitalization.words,
-                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Display name',
                         prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: _referralCodeController,
+                      controller: _referralCode,
                       textCapitalization: TextCapitalization.characters,
                       autocorrect: false,
-                      textInputAction: TextInputAction.next,
                       decoration: const InputDecoration(
                         labelText: 'Host referral code',
                         prefixIcon: Icon(Icons.confirmation_number_outlined),
-                        border: OutlineInputBorder(),
-                        helperText: 'Paste Agent Referral Code here to create a host account.',
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _chooseDateOfBirth,
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: Text(
+                        _dateOfBirth == null
+                            ? 'Choose date of birth'
+                            : 'Date of birth: ${_isoDate(_dateOfBirth!)}',
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8, bottom: 12),
+                      child: Text(
+                        'Hosts must be at least 18 years old. Your date of '
+                        'birth is checked by the server.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
                   ],
                   TextField(
-                    controller: _emailController,
+                    controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autocorrect: false,
-                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   TextField(
-                    controller: _passwordController,
+                    controller: _password,
                     obscureText: _obscurePassword,
-                    enableSuggestions: false,
                     autocorrect: false,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) {
-                      if (!_isLoading) {
-                        _submit();
-                      }
-                    },
                     decoration: InputDecoration(
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         tooltip: _obscurePassword
                             ? 'Show password'
@@ -216,29 +247,28 @@ class _HostAuthScreenState extends State<HostAuthScreen> {
                         ),
                       ),
                     ),
+                    onSubmitted: (_) {
+                      if (!_loading) _submit();
+                    },
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    height: 54,
-                    child: FilledButton(
-                      onPressed: _isLoading ? null : _submit,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(_isLogin ? 'Sign In' : 'Create Host Account'),
-                    ),
+                  const SizedBox(height: 22),
+                  FilledButton(
+                    onPressed: _loading ? null : _submit,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(_isLogin ? 'Sign in' : 'Create host account'),
                   ),
-                  const SizedBox(height: 12),
                   TextButton(
-                    onPressed: _isLoading
+                    onPressed: _loading
                         ? null
                         : () => setState(() => _isLogin = !_isLogin),
                     child: Text(
                       _isLogin
-                          ? 'Need a host account? Register with a referral code'
+                          ? 'New host? Register with a referral code'
                           : 'Already registered? Sign in',
                     ),
                   ),

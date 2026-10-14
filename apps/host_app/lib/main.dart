@@ -14,6 +14,8 @@ import 'supabase_config.dart';
 
 import 'screens/host_profile_screen.dart';
 
+import 'screens/host_onboarding_screen.dart';
+
 const _pageBackground = Color(0xFF090B10);
 
 const _surface = Color(0xFF141821);
@@ -150,13 +152,10 @@ class HostAuthGate extends StatelessWidget {
 
     return StreamBuilder<AuthState>(
       stream: auth.onAuthStateChange,
-
       initialData: AuthState(
         AuthChangeEvent.initialSession,
-
         auth.currentSession,
       ),
-
       builder: (context, snapshot) {
         final session = snapshot.data?.session ?? auth.currentSession;
 
@@ -164,7 +163,76 @@ class HostAuthGate extends StatelessWidget {
           return const HostAuthScreen();
         }
 
-        return const HostSignedInScreen();
+        return FutureBuilder<Map<String, dynamic>?>(
+          future: Supabase.instance.client
+              .from('profiles')
+              .select('role, host_onboarding_completed')
+              .eq('id', session.user.id)
+              .maybeSingle(),
+          builder: (context, profileSnapshot) {
+            if (profileSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            if (profileSnapshot.hasError) {
+              return Scaffold(
+                body: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Could not load your account.'),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: () {
+                            auth.refreshSession();
+                          },
+                          child: const Text('Retry session'),
+                        ),
+                        TextButton(
+                          onPressed: () => auth.signOut(),
+                          child: const Text('Sign out'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            final profile = profileSnapshot.data;
+
+            if (profile == null) {
+              return Scaffold(
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Your profile could not be found.'),
+                      TextButton(
+                        onPressed: () => auth.signOut(),
+                        child: const Text('Sign out'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final isHost = profile['role'] == 'host';
+            final completed = profile['host_onboarding_completed'] == true;
+
+            if (isHost && !completed) {
+              return const HostOnboardingScreen();
+            }
+
+            // Preserve the existing dashboard and its role validation.
+            return const HostSignedInScreen();
+          },
+        );
       },
     );
   }
