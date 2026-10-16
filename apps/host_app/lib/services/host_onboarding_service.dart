@@ -11,6 +11,20 @@ class HostOnboardingService {
     required double longitude,
     required double accuracyMeters,
   }) async {
+    if (!latitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        !longitude.isFinite ||
+        longitude < -180 ||
+        longitude > 180 ||
+        !accuracyMeters.isFinite ||
+        accuracyMeters < 0 ||
+        accuracyMeters > 5000) {
+      throw StateError(
+        'Your GPS reading is not accurate enough. Please try again outdoors.',
+      );
+    }
+
     final response = await _client.functions.invoke(
       'set-host-location',
       body: {
@@ -29,32 +43,15 @@ class HostOnboardingService {
       throw StateError('The server returned an invalid response.');
     }
 
-    return Map<String, dynamic>.from(response.data as Map);
-  }
+    final result = Map<String, dynamic>.from(response.data as Map);
 
-  Future<Map<String, dynamic>> saveManualLocation({
-    required String countryCode,
-    required String country,
-    required String continent,
-  }) async {
-    final response = await _client.functions.invoke(
-      'set-host-location',
-      body: {
-        'mode': 'manual',
-        'country_code': countryCode.trim().toUpperCase(),
-        'country': country.trim(),
-        'continent': continent,
-      },
-    );
-
-    if (response.status < 200 || response.status >= 300) {
-      throw StateError('The server could not save your location.');
+    if (result['success'] != true) {
+      throw StateError(
+        result['error']?.toString() ??
+            'Your location could not be verified. Please try again.',
+      );
     }
 
-    if (response.data is! Map) {
-      throw StateError('The server returned an invalid response.');
-    }
-
-    return Map<String, dynamic>.from(response.data as Map);
+    return result;
   }
 }
