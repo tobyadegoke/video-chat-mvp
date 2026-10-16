@@ -6,7 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// country or continent values.
 class HostLocationService {
   HostLocationService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -21,7 +21,9 @@ class HostLocationService {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      throw StateError('Location permission is required for host registration.');
+      throw StateError(
+        'Location permission is required for host registration.',
+      );
     }
 
     final position = await Geolocator.getCurrentPosition(
@@ -34,19 +36,30 @@ class HostLocationService {
     final response = await _client.functions.invoke(
       'set-host-location',
       body: {
+        'mode': 'gps',
         'latitude': position.latitude,
         'longitude': position.longitude,
         'accuracy_meters': position.accuracy,
-        'is_update': isUpdate,
       },
     );
 
     if (response.status < 200 || response.status >= 300) {
       throw StateError('The server could not verify this location.');
     }
+
     if (response.data is! Map) {
       throw StateError('The server returned an invalid location response.');
     }
-    return Map<String, dynamic>.from(response.data as Map);
+
+    final result = Map<String, dynamic>.from(response.data as Map);
+
+    if (result['success'] != true) {
+      throw StateError(
+        result['error']?.toString() ??
+            'The server could not verify this location.',
+      );
+    }
+
+    return result;
   }
 }

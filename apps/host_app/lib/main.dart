@@ -143,32 +143,72 @@ class HostApp extends StatelessWidget {
   }
 }
 
-class HostAuthGate extends StatelessWidget {
+class HostAuthGate extends StatefulWidget {
   const HostAuthGate({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final auth = Supabase.instance.client.auth;
+  State<HostAuthGate> createState() => _HostAuthGateState();
+}
 
+class _HostAuthGateState extends State<HostAuthGate> {
+  final _auth = Supabase.instance.client.auth;
+
+  String? _loadedUserId;
+  Future<Map<String, dynamic>?>? _profileFuture;
+
+  Future<Map<String, dynamic>?> _loadProfile(String userId) {
+    return Supabase.instance.client
+        .from('profiles')
+        .select('role, host_onboarding_completed')
+        .eq('id', userId)
+        .maybeSingle();
+  }
+
+  void _refreshProfile(String userId) {
+    setState(() {
+      _loadedUserId = userId;
+      _profileFuture = _loadProfile(userId);
+    });
+  }
+
+  void _showOnboardingComplete(BuildContext context, String userId) {
+    _refreshProfile(userId);
+
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => HostOnboardingCompleteScreen(
+          onContinue: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
-      stream: auth.onAuthStateChange,
+      stream: _auth.onAuthStateChange,
       initialData: AuthState(
         AuthChangeEvent.initialSession,
-        auth.currentSession,
+        _auth.currentSession,
       ),
       builder: (context, snapshot) {
-        final session = snapshot.data?.session ?? auth.currentSession;
+        final session = snapshot.data?.session ?? _auth.currentSession;
 
         if (session == null) {
+          _loadedUserId = null;
+          _profileFuture = null;
           return const HostAuthScreen();
         }
 
+        final userId = session.user.id;
+
+        if (_loadedUserId != userId || _profileFuture == null) {
+          _loadedUserId = userId;
+          _profileFuture = _loadProfile(userId);
+        }
+
         return FutureBuilder<Map<String, dynamic>?>(
-          future: Supabase.instance.client
-              .from('profiles')
-              .select('role, host_onboarding_completed')
-              .eq('id', session.user.id)
-              .maybeSingle(),
+          future: _profileFuture,
           builder: (context, profileSnapshot) {
             if (profileSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -187,13 +227,11 @@ class HostAuthGate extends StatelessWidget {
                         const Text('Could not load your account.'),
                         const SizedBox(height: 12),
                         FilledButton(
-                          onPressed: () {
-                            auth.refreshSession();
-                          },
-                          child: const Text('Retry session'),
+                          onPressed: () => _refreshProfile(userId),
+                          child: const Text('Retry'),
                         ),
                         TextButton(
-                          onPressed: () => auth.signOut(),
+                          onPressed: () => _auth.signOut(),
                           child: const Text('Sign out'),
                         ),
                       ],
@@ -213,7 +251,7 @@ class HostAuthGate extends StatelessWidget {
                     children: [
                       const Text('Your profile could not be found.'),
                       TextButton(
-                        onPressed: () => auth.signOut(),
+                        onPressed: () => _auth.signOut(),
                         child: const Text('Sign out'),
                       ),
                     ],
@@ -226,7 +264,9 @@ class HostAuthGate extends StatelessWidget {
             final completed = profile['host_onboarding_completed'] == true;
 
             if (isHost && !completed) {
-              return const HostOnboardingScreen();
+              return HostOnboardingScreen(
+                onCompleted: () => _showOnboardingComplete(context, userId),
+              );
             }
 
             // Preserve the existing dashboard and its role validation.
@@ -234,6 +274,56 @@ class HostAuthGate extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class HostOnboardingCompleteScreen extends StatelessWidget {
+  const HostOnboardingCompleteScreen({super.key, required this.onContinue});
+
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 76,
+                    color: Color(0xFF61D9B4),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'You’re all set',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Your host account and location have been verified. '
+                    'Continue to your host dashboard.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 28),
+                  FilledButton(
+                    onPressed: onContinue,
+                    child: const Text('Continue to dashboard'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
