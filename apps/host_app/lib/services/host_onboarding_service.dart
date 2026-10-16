@@ -1,16 +1,54 @@
+import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Owns the complete host GPS verification workflow:
+/// permissions, GPS capture, validation, and server verification.
+///
+/// Country and continent are determined by the trusted Edge Function,
+/// never by values supplied by the client.
 class HostOnboardingService {
   HostOnboardingService({SupabaseClient? client})
     : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
-  Future<Map<String, dynamic>> saveGpsLocation({
-    required double latitude,
-    required double longitude,
-    required double accuracyMeters,
-  }) async {
+  Future<Map<String, dynamic>> captureAndSaveGpsLocation() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw StateError(
+        'Turn on your device location services, then try again.',
+      );
+    }
+
+    var permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw StateError(
+        'Location permission is blocked. Open your app settings '
+        'and allow location access.',
+      );
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw StateError(
+        'Location permission is required to complete host setup.',
+      );
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.best,
+        timeLimit: Duration(seconds: 20),
+      ),
+    );
+
+    final latitude = position.latitude;
+    final longitude = position.longitude;
+    final accuracyMeters = position.accuracy;
+
     if (!latitude.isFinite ||
         latitude < -90 ||
         latitude > 90 ||
@@ -21,7 +59,8 @@ class HostOnboardingService {
         accuracyMeters < 0 ||
         accuracyMeters > 5000) {
       throw StateError(
-        'Your GPS reading is not accurate enough. Please try again outdoors.',
+        'Your GPS reading is not accurate enough. '
+        'Please try again outdoors.',
       );
     }
 
@@ -40,7 +79,7 @@ class HostOnboardingService {
     }
 
     if (response.data is! Map) {
-      throw StateError('The server returned an invalid response.');
+      throw StateError('The server returned an invalid location response.');
     }
 
     final result = Map<String, dynamic>.from(response.data as Map);

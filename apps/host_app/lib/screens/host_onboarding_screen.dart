@@ -25,42 +25,7 @@ class _HostOnboardingScreenState extends State<HostOnboardingScreen> {
     });
 
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        throw StateError(
-          'Turn on your device location services, then try again.',
-        );
-      }
-
-      var permission = await Geolocator.checkPermission();
-
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        throw StateError(
-          'Location permission is blocked. Open your app settings and allow location access.',
-        );
-      }
-
-      if (permission == LocationPermission.denied) {
-        throw StateError(
-          'Location permission is required to complete host setup.',
-        );
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-          timeLimit: Duration(seconds: 20),
-        ),
-      );
-
-      final result = await _service.saveGpsLocation(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracyMeters: position.accuracy,
-      );
+      final result = await _service.captureAndSaveGpsLocation();
 
       if (!mounted) return;
 
